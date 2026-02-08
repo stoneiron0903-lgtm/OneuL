@@ -1,0 +1,241 @@
+:root {
+  color-scheme: dark;
+  --bg: #121212;
+  --panel: #161616;
+  --panel-2: #101010;
+  --text: rgba(240, 240, 240, 0.5);
+  --text-strong: #f0f0f0;
+  --line: #2a2a2a;
+  --line-half: #202020;
+  --label: #c8c8c8;
+  --now: #ff5a5a;
+  --left-pad: 56px;
+  --day-bar-height: 24px;
+  --minute-px: 0.5px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-strong);
+  font-family: "Segoe UI", "Noto Sans KR", Arial, sans-serif;
+}
+
+#app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#header {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  gap: 8px;
+  display: none;
+}
+
+#dateLabel {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+#timeLabel {
+  margin-left: auto;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: right;
+}
+
+#timelineWrap {
+  flex: 1;
+  position: relative;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+#stickyDay {
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--day-bar-height);
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  background: var(--panel-2);
+  border-bottom: 1px solid #1e1e1e;
+  z-index: 5;
+  pointer-events: none;
+}
+
+#stickyDay .date {
+  font-weight: 700;
+  font-size: 10px;
+}
+
+#stickyDay .weekday {
+  font-size: 10px;
+  margin-left: 4px;
+}
+
+#timeline {
+  position: relative;
+  min-height: 100%;
+}
+
+.hour-line {
+  position: absolute;
+  left: var(--left-pad);
+  right: 12px;
+  height: 1px;
+  background: var(--line);
+}
+
+.alarm-line {
+  position: absolute;
+  left: var(--left-pad);
+  right: 12px;
+  height: 2px;
+  background: rgba(200, 200, 200, 0.6);
+  z-index: 2;
+}
+
+.half-line {
+  position: absolute;
+  left: calc(var(--left-pad) + 16px);
+  right: 12px;
+  height: 1px;
+  background: var(--line-half);
+}
+
+.hour-label {
+  position: absolute;
+  left: 8px;
+  color: var(--label);
+  font-size: 11px;
+  line-height: 1;
+  transform: translateY(calc(-50% + 4px));
+}
+
+.day-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--day-bar-height);
+  background: var(--panel-2);
+  border-bottom: 1px solid #1e1e1e;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  color: var(--text-strong);
+}
+
+.day-bar .date {
+  font-weight: 700;
+  font-size: 10px;
+}
+
+.day-bar .weekday {
+  font-size: 8px;
+  margin-left: 4px;
+}
+
+#nowLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+
+#nowLine .line {
+  position: absolute;
+  left: var(--left-pad);
+  right: 12px;
+  top: 0;
+  height: 2px;
+  background: var(--now);
+}
+
+#nowLine .dot {
+  position: absolute;
+  left: calc(var(--left-pad) - 4px);
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--now);
+}
+
+#nowLine .timeText {
+  position: absolute;
+  left: calc(var(--left-pad) + 6px);
+  top: -22px;
+  font-size: 12px;
+  color: var(--now);
+  background: var(--bg);
+  padding: 0 4px;
+}
+
+
+.click-bar {
+  position: absolute;
+  left: var(--left-pad);
+  right: 12px;
+  height: 30px;
+  background: transparent;
+  opacity: 0;
+  border-radius: 6px;
+}
+
+.click-marker {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.click-marker .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
+}
+
+.click-marker .label {
+  font-size: 12px;
+  color: #ffffff;
+  background: transparent;
+  white-space: nowrap;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.7);
+}
+
+.selection-line {
+  position: absolute;
+  left: var(--left-pad);
+  right: 12px;
+  height: 2px;
+  background: rgba(200, 200, 200, 0.8);
+  z-index: 2;
+}
+
+.zooming .click-marker .label {
+  font-size: 24px;
+}
