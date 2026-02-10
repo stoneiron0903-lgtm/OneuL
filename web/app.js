@@ -1,11 +1,16 @@
 const BASE_MINUTE_PX = 0.5;
-const ZOOM_MINUTE_PX = 2.0;
+const ZOOM_MINUTE_PX = 4.0;
 const DAY_BAR_HEIGHT = 24;
 const DAYS_BEFORE = 1;
 const DAYS_AFTER = 1;
 const TOTAL_DAYS = DAYS_BEFORE + DAYS_AFTER + 1;
 const DAY_MINUTES = 24 * 60;
 const NOW_OFFSET = DAY_BAR_HEIGHT + 17;
+const SELECTION_SPREAD_MS = 200;
+const OPACITY_JITTER_MS = 90;
+const OPACITY_IDLE_MS = 140;
+const OPACITY_JITTER_MIN = 0.5;
+const OPACITY_JITTER_MAX = 0.8;
 
 let minutePx = BASE_MINUTE_PX;
 let dayBlockHeight = DAY_BAR_HEIGHT + DAY_MINUTES * minutePx;
@@ -32,6 +37,16 @@ let selectAnchorY = 0;
 let selectAnchorX = 0;
 const alarms = [];
 let zoomAnimToken = 0;
+let selectionLineAnimated = false;
+let pointerActive = false;
+let modalOverlay = null;
+let modalTitle = null;
+let modalMessage = null;
+let modalInput = null;
+let modalConfirmBtn = null;
+let modalCancelBtn = null;
+let modalOnConfirm = null;
+let modalOnCancel = null;
 
 function recalcSizes() {
   dayBlockHeight = DAY_BAR_HEIGHT + DAY_MINUTES * minutePx;
@@ -135,6 +150,186 @@ function formatDateTimeKorean(date, hour, minute, second) {
   return `${pad2(hour)}\uC2DC ${pad2(minute)}\uBD84`;
 }
 
+function formatAlarmInfo(alarm) {
+  const time = alarm instanceof Date ? alarm : alarm.time;
+  const title = alarm && !(alarm instanceof Date) ? alarm.title : "";
+  const dateText = formatDate(time);
+  const timeText = formatDateTimeKorean(
+    time,
+    time.getHours(),
+    time.getMinutes(),
+    time.getSeconds()
+  );
+  return title ? `${dateText} ${timeText} - ${title}` : `${dateText} ${timeText}`;
+}
+
+function ensureModal() {
+  if (modalOverlay) return;
+  modalOverlay = document.createElement("div");
+  modalOverlay.className = "modal-overlay";
+  modalOverlay.setAttribute("aria-hidden", "true");
+
+  const card = document.createElement("div");
+  card.className = "modal-card";
+  card.setAttribute("role", "dialog");
+  card.setAttribute("aria-modal", "true");
+
+  modalTitle = document.createElement("div");
+  modalTitle.className = "modal-title";
+
+  modalMessage = document.createElement("div");
+  modalMessage.className = "modal-message";
+
+  modalInput = document.createElement("input");
+  modalInput.className = "modal-input";
+  modalInput.type = "text";
+  modalInput.autocomplete = "off";
+
+  const actions = document.createElement("div");
+  actions.className = "modal-actions";
+
+  modalCancelBtn = document.createElement("button");
+  modalCancelBtn.className = "modal-btn ghost";
+  modalCancelBtn.type = "button";
+  modalCancelBtn.textContent = "\uCDE8\uC18C";
+
+  modalConfirmBtn = document.createElement("button");
+  modalConfirmBtn.className = "modal-btn primary";
+  modalConfirmBtn.type = "button";
+  modalConfirmBtn.textContent = "\uD655\uC778";
+
+  actions.appendChild(modalCancelBtn);
+  actions.appendChild(modalConfirmBtn);
+  card.appendChild(modalTitle);
+  card.appendChild(modalMessage);
+  card.appendChild(modalInput);
+  card.appendChild(actions);
+  modalOverlay.appendChild(card);
+  document.body.appendChild(modalOverlay);
+
+  modalConfirmBtn.addEventListener("click", () => {
+    const cb = modalOnConfirm;
+    const value =
+      modalInput && modalInput.style.display !== "none" ? modalInput.value : null;
+    hideModal();
+    if (cb) cb(value);
+  });
+  modalCancelBtn.addEventListener("click", () => {
+    const cb = modalOnCancel;
+    hideModal();
+    if (cb) cb();
+  });
+  modalOverlay.addEventListener("click", (e) => {
+    if (e.target !== modalOverlay) return;
+    const cb = modalOnCancel;
+    hideModal();
+    if (cb) cb();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!modalOverlay.classList.contains("open")) return;
+    const cb = modalOnCancel;
+    hideModal();
+    if (cb) cb();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    if (!modalOverlay.classList.contains("open")) return;
+    if (!modalInput || modalInput.style.display === "none") return;
+    e.preventDefault();
+    modalConfirmBtn.click();
+  });
+}
+
+function showModal({
+  title,
+  message,
+  confirmText,
+  cancelText,
+  showCancel,
+  input,
+  onConfirm,
+  onCancel,
+}) {
+  ensureModal();
+  modalTitle.textContent = title || "";
+  modalTitle.style.display = title ? "block" : "none";
+  modalMessage.textContent = message;
+  modalConfirmBtn.textContent = confirmText || "\uD655\uC778";
+  modalCancelBtn.textContent = cancelText || "\uCDE8\uC18C";
+  modalCancelBtn.style.display = showCancel ? "inline-flex" : "none";
+  if (input && input.show) {
+    modalInput.style.display = "block";
+    modalInput.placeholder = input.placeholder || "";
+    modalInput.value = input.value || "";
+  } else {
+    modalInput.style.display = "none";
+    modalInput.value = "";
+    modalInput.placeholder = "";
+  }
+  modalOnConfirm = onConfirm || null;
+  modalOnCancel = onCancel || null;
+  modalOverlay.classList.add("open");
+  modalOverlay.setAttribute("aria-hidden", "false");
+  if (modalInput.style.display !== "none") {
+    modalInput.focus();
+    modalInput.select();
+  } else {
+    modalConfirmBtn.focus();
+  }
+}
+
+function hideModal() {
+  if (!modalOverlay) return;
+  modalOverlay.classList.remove("open");
+  modalOverlay.setAttribute("aria-hidden", "true");
+  modalOnConfirm = null;
+  modalOnCancel = null;
+}
+
+function showConfirm(message, onConfirm, onCancel) {
+  showModal({
+    title: "\uC608\uC57D \uD655\uC778",
+    message,
+    confirmText: "\uD655\uC778",
+    cancelText: "\uCDE8\uC18C",
+    showCancel: true,
+    onConfirm,
+    onCancel,
+  });
+}
+
+function showAlert(message) {
+  showModal({
+    title: "\uC54C\uB9BC",
+    message,
+    confirmText: "\uD655\uC778",
+    showCancel: false,
+  });
+}
+
+function isPastSelection(dateTime) {
+  const now = new Date();
+  return dateTime.getTime() < now.getTime();
+}
+
+function showPrompt(message, onConfirm, options = {}) {
+  showModal({
+    title: options.title || "\uC81C\uBAA9 \uC785\uB825",
+    message,
+    confirmText: options.confirmText || "\uD655\uC778",
+    cancelText: options.cancelText || "\uCDE8\uC18C",
+    showCancel: true,
+    input: {
+      show: true,
+      placeholder: options.placeholder || "",
+      value: options.value || "",
+    },
+    onConfirm,
+    onCancel: options.onCancel,
+  });
+}
+
 function ensureSelectionElements() {
   if (!selectionMarker) {
     selectionMarker = document.createElement("div");
@@ -154,9 +349,17 @@ function ensureSelectionElements() {
   if (!selectionLine) {
     selectionLine = document.createElement("div");
     selectionLine.className = "selection-line";
+    const inner = document.createElement("div");
+    inner.className = "selection-line__inner";
+    selectionLine.appendChild(inner);
   }
   if (!selectionLine.isConnected) {
     timeline.appendChild(selectionLine);
+  }
+  if (!selectionLine.querySelector(".selection-line__inner")) {
+    const inner = document.createElement("div");
+    inner.className = "selection-line__inner";
+    selectionLine.appendChild(inner);
   }
 }
 
@@ -168,6 +371,11 @@ function updateSelectionMarker() {
     selectionMarker.style.display = "none";
     selectionBar.style.display = "none";
     selectionLine.style.display = "none";
+    selectionLine.classList.remove("spread");
+    selectionLine.classList.remove("thick");
+    selectionLine.classList.remove("dim");
+    selectionLine.classList.remove("wobble");
+    selectionLineAnimated = false;
     return;
   }
   const minutes =
@@ -181,7 +389,7 @@ function updateSelectionMarker() {
   const barTop = Math.max(0, y - hourHeight / 2);
 
   selectionMarker.style.display = "inline-flex";
-  selectionMarker.style.top = `${barTop}px`;
+  selectionMarker.style.top = `${y}px`;
   selectionMarker.style.left = `${Math.max(8, selectedX)}px`;
   selectionMarker.style.transform = "translateY(calc(-100% - 4px))";
   selectionMarker.querySelector('.label').textContent = formatDateTimeKorean(
@@ -195,26 +403,81 @@ function updateSelectionMarker() {
   selectionBar.style.height = `${hourHeight}px`;
   selectionBar.style.top = `${barTop}px`;
 
+  if (selectAnchorTime) {
+    selectionLine.classList.add("thick");
+    selectionLine.classList.add("dim");
+  } else {
+    selectionLine.classList.remove("thick");
+    selectionLine.classList.remove("dim");
+  }
+
+  const leftPadValue = getComputedStyle(document.documentElement).getPropertyValue(
+    "--left-pad"
+  );
+  const leftPad = Number.parseFloat(leftPadValue);
+  const lineLeft = Number.isFinite(leftPad) ? leftPad : 0;
+  const lineRight = timeline.clientWidth - 12;
+  const clampedX = Math.min(Math.max(selectedX, lineLeft), lineRight);
+  const originPx = Math.max(0, clampedX - lineLeft);
+  const wasHidden =
+    selectionLine.style.display === "none" || selectionLine.style.display === "";
+
   selectionLine.style.display = "block";
   selectionLine.style.top = `${y}px`;
+  selectionLine.style.transformOrigin = `${originPx}px 50%`;
+  if (!selectionLineAnimated) {
+    selectionLineAnimated = true;
+    selectionLine.classList.remove("spread");
+    selectionLine.getBoundingClientRect();
+    selectionLine.classList.add("spread");
+  }
+}
+
+function hideSelectionElements() {
+  selectedDateTime = null;
+  selectAnchorTime = null;
+  if (selectionMarker) selectionMarker.style.display = "none";
+  if (selectionBar) selectionBar.style.display = "none";
+  if (selectionLine) {
+    selectionLine.style.display = "none";
+    selectionLine.classList.remove("spread");
+    selectionLine.classList.remove("thick");
+    selectionLine.classList.remove("dim");
+    selectionLine.classList.remove("wobble");
+    selectionLineAnimated = false;
+  }
 }
 
 function renderAlarms() {
   timeline.querySelectorAll(".alarm-line").forEach((line) => line.remove());
   alarms.forEach((alarm) => {
-    const dayIndex = diffDays(startOfDay(alarm), startDate);
+    const alarmTime = alarm instanceof Date ? alarm : alarm.time;
+    const title = alarm && !(alarm instanceof Date) ? alarm.title : "";
+    const dayIndex = diffDays(startOfDay(alarmTime), startDate);
     if (dayIndex < 0 || dayIndex >= TOTAL_DAYS) return;
     const minutes =
-      alarm.getHours() * 60 +
-      alarm.getMinutes() +
-      alarm.getSeconds() / 60;
+      alarmTime.getHours() * 60 +
+      alarmTime.getMinutes() +
+      alarmTime.getSeconds() / 60;
     const y =
       dayIndex * dayBlockHeight +
       DAY_BAR_HEIGHT +
       minutes * minutePx;
     const line = document.createElement("div");
     line.className = "alarm-line";
+    line.dataset.timestamp = String(alarmTime.getTime());
+    line.dataset.title = title;
     line.style.top = `${y}px`;
+    const label = document.createElement("div");
+    label.className = "alarm-line__label";
+    const timeText = formatDateTimeKorean(
+      alarmTime,
+      alarmTime.getHours(),
+      alarmTime.getMinutes(),
+      alarmTime.getSeconds()
+    );
+    label.textContent = title ? `${timeText} \u00b7 ${title}` : timeText;
+    line.appendChild(label);
     timeline.appendChild(line);
   });
 }
@@ -273,6 +536,7 @@ function renderDayBars() {
     const date = addDays(startDate, index);
     const parts = formatDateParts(date);
     bar.innerHTML = `<span class="date">${parts.date}</span><span class="weekday"> ${parts.weekday}</span>`;
+    bar.classList.add("special-day");
   });
 }
 
@@ -288,6 +552,7 @@ function updateStickyDay() {
   const date = addDays(startDate, displayIndex);
   const parts = formatDateParts(date);
   stickyDay.innerHTML = `<span class="date">${parts.date}</span><span class="weekday"> ${parts.weekday}</span>`;
+  stickyDay.classList.add("special-day");
   stickyDay.style.transform = "translateY(0)";
   stickyDay.style.display = "flex";
   stickyDay.style.visibility = "visible";
@@ -416,6 +681,10 @@ function installDragScroll() {
   let lastTime = 0;
   let inertiaId = null;
   let pressTimer = null;
+  let wobbleTimer = null;
+  let opacityDelayTimer = null;
+  let opacityInterval = null;
+  let opacityIdleTimer = null;
   let pressX = 0;
   let pressY = 0;
 
@@ -483,12 +752,114 @@ function installDragScroll() {
     updateSelectionMarker();
   }
 
+  function clearWobble() {
+    if (wobbleTimer) {
+      clearTimeout(wobbleTimer);
+      wobbleTimer = null;
+    }
+    if (selectionLine) {
+      selectionLine.classList.remove("wobble");
+    }
+  }
+
+  function triggerWobble() {
+    if (!selectionLine) return;
+    selectionLine.classList.add("wobble");
+    if (wobbleTimer) clearTimeout(wobbleTimer);
+    wobbleTimer = setTimeout(() => {
+      if (selectionLine) selectionLine.classList.remove("wobble");
+      wobbleTimer = null;
+    }, 120);
+  }
+
+  function clearOpacityJitter() {
+    if (opacityDelayTimer) {
+      clearTimeout(opacityDelayTimer);
+      opacityDelayTimer = null;
+    }
+    if (opacityInterval) {
+      clearInterval(opacityInterval);
+      opacityInterval = null;
+    }
+    if (opacityIdleTimer) {
+      clearTimeout(opacityIdleTimer);
+      opacityIdleTimer = null;
+    }
+    if (selectionLine) selectionLine.style.opacity = "";
+  }
+
+  function setLineOpacity(value) {
+    if (!selectionLine) return;
+    selectionLine.style.opacity = value;
+  }
+
+  function applyRandomOpacity() {
+    if (!selectionLine) return;
+    const value =
+      OPACITY_JITTER_MIN + Math.random() * (OPACITY_JITTER_MAX - OPACITY_JITTER_MIN);
+    selectionLine.style.opacity = value.toFixed(2);
+  }
+
+  function startOpacityJitter() {
+    if (opacityInterval) return;
+    applyRandomOpacity();
+    opacityInterval = setInterval(applyRandomOpacity, OPACITY_JITTER_MS);
+  }
+
+  function stopOpacityJitter() {
+    if (opacityInterval) {
+      clearInterval(opacityInterval);
+      opacityInterval = null;
+    }
+    setLineOpacity("0.5");
+  }
+
+  function noteOpacityActivity() {
+    if (!opacityDelayTimer && !opacityInterval) {
+      opacityDelayTimer = setTimeout(() => {
+        opacityDelayTimer = null;
+        startOpacityJitter();
+      }, SELECTION_SPREAD_MS);
+    } else if (!opacityInterval && !opacityDelayTimer) {
+      startOpacityJitter();
+    }
+    if (opacityIdleTimer) clearTimeout(opacityIdleTimer);
+    opacityIdleTimer = setTimeout(() => {
+      opacityIdleTimer = null;
+      stopOpacityJitter();
+    }, OPACITY_IDLE_MS);
+  }
+
+  function maybeShiftDuringDrag(clientY) {
+    const beforeScroll = timelineWrap.scrollTop;
+    const beforeDate = startDate;
+    maybeShiftWindow();
+    if (timelineWrap.scrollTop !== beforeScroll || startDate !== beforeDate) {
+      startScroll = timelineWrap.scrollTop;
+      startY = clientY;
+    }
+  }
+
+  function alarmFromPointer(clientX, clientY) {
+    const hit = document.elementFromPoint(clientX, clientY);
+    if (!hit || !hit.closest) return null;
+    const alarmEl = hit.closest(".alarm-line");
+    if (!alarmEl) return null;
+    const stamp = alarmEl.dataset.timestamp;
+    if (!stamp) return null;
+    const ts = Number(stamp);
+    if (!Number.isFinite(ts)) return null;
+    const title = alarmEl.dataset.title || "";
+    return { time: new Date(ts), title };
+  }
+
   timelineWrap.addEventListener("pointerdown", (e) => {
     if (e.pointerType !== "mouse" || e.button !== 0) return;
     if (inertiaId) {
       cancelAnimationFrame(inertiaId);
       inertiaId = null;
     }
+    pointerActive = true;
     pressed = true;
     dragging = false;
     selecting = false;
@@ -502,9 +873,16 @@ function installDragScroll() {
     clearTimer();
     pressTimer = setTimeout(() => {
       if (!pressed) return;
+      const result = dateTimeFromPointer(pressX, pressY);
+      if (isPastSelection(result.dateTime)) {
+        showAlert("\uD604\uC7AC \uC2DC\uAC04 \uC774\uD6C4\uBD80\uD130 \uC124\uC815\uD560 \uC218 \uC788\uC5B4\uC694.");
+        selecting = false;
+        dragging = false;
+        hideSelectionElements();
+        return;
+      }
       selecting = true;
       dragging = false;
-      const result = dateTimeFromPointer(pressX, pressY);
       selectAnchorTime = result.dateTime;
       selectAnchorY = pressY;
       selectAnchorX = result.x;
@@ -520,6 +898,8 @@ function installDragScroll() {
     if (!pressed) return;
     if (selecting) {
       updateSelectionFromAnchor(e.clientX, e.clientY);
+      triggerWobble();
+      noteOpacityActivity();
       return;
     }
     if (pressTimer) {
@@ -539,38 +919,57 @@ function installDragScroll() {
     velocity = velocity * 0.6 + (-dyInst / dt) * 0.4;
     lastY = e.clientY;
     lastTime = now;
-    if (timelineWrap.scrollTop <= 2) {
-      maybeShiftWindow();
-      startScroll = timelineWrap.scrollTop;
-      startY = e.clientY;
-    }
+    maybeShiftDuringDrag(e.clientY);
   });
 
   timelineWrap.addEventListener("pointerup", (e) => {
     if (!pressed) return;
     pressed = false;
+    pointerActive = false;
     clearTimer();
     timelineWrap.releasePointerCapture(e.pointerId);
     if (selecting) {
       selecting = false;
       selectAnchorTime = null;
-      animateMinutePx(BASE_MINUTE_PX, selectedDateTime, e.clientY);
+      clearWobble();
+      clearOpacityJitter();
       if (selectedDateTime) {
+        const alarmTime = new Date(selectedDateTime.getTime());
         const label = formatDateTimeKorean(
-          selectedDateTime,
-          selectedDateTime.getHours(),
-          selectedDateTime.getMinutes(),
-          selectedDateTime.getSeconds()
+          alarmTime,
+          alarmTime.getHours(),
+          alarmTime.getMinutes(),
+          alarmTime.getSeconds()
         );
-        if (confirm(`${label}\uC5D0 \uC54C\uB78C\uC744 \uB9CC\uB4E4\uAE4C\uC694?`)) {
-          alarms.push(new Date(selectedDateTime.getTime()));
-          renderAlarms();
+        if (isPastSelection(alarmTime)) {
+          showAlert("\uD604\uC7AC \uC2DC\uAC04 \uC774\uD6C4\uBD80\uD130 \uC124\uC815\uD560 \uC218 \uC788\uC5B4\uC694.");
+          hideSelectionElements();
+        } else {
+          showConfirm(
+            `${label}\uC5D0 \uC54C\uB78C\uC744 \uB9CC\uB4E4\uAE4C\uC694?`,
+            () => {
+              showPrompt(
+                "\uC81C\uBAA9\uC744 \uC785\uB825\uD574\uC8FC\uC138\uC694.",
+                (value) => {
+                  const title = typeof value === "string" ? value.trim() : "";
+                  alarms.push({ time: new Date(alarmTime.getTime()), title });
+                  renderAlarms();
+                  hideSelectionElements();
+                },
+                {
+                  onCancel: hideSelectionElements,
+                }
+              );
+            },
+            hideSelectionElements
+          );
         }
-        selectedDateTime = null;
-        if (selectionMarker) selectionMarker.style.display = "none";
-        if (selectionBar) selectionBar.style.display = "none";
-        if (selectionLine) selectionLine.style.display = "none";
       }
+      return;
+    }
+    const alarm = alarmFromPointer(e.clientX, e.clientY);
+    if (alarm) {
+      showAlert(`\uC608\uC57D \uD655\uC778: ${formatAlarmInfo(alarm)}`);
       return;
     }
     if (!dragging) return;
@@ -590,14 +989,25 @@ function installDragScroll() {
     inertiaId = requestAnimationFrame(step);
   });
 
+  timelineWrap.addEventListener("dblclick", (e) => {
+    if (selecting) return;
+    const result = dateTimeFromPointer(e.clientX, e.clientY);
+    const isZoomed = Math.abs(minutePx - ZOOM_MINUTE_PX) < 0.001;
+    const target = isZoomed ? BASE_MINUTE_PX : ZOOM_MINUTE_PX;
+    animateMinutePx(target, result.dateTime, e.clientY);
+    e.preventDefault();
+  });
+
   timelineWrap.addEventListener("pointerleave", (e) => {
     if (!pressed) return;
     pressed = false;
+    pointerActive = false;
     clearTimer();
     if (selecting) {
       selecting = false;
       selectAnchorTime = null;
-      animateMinutePx(BASE_MINUTE_PX, selectedDateTime, e.clientY);
+      clearWobble();
+      clearOpacityJitter();
       return;
     }
     timelineWrap.releasePointerCapture(e.pointerId);
@@ -617,7 +1027,9 @@ function init() {
   dateLabel.addEventListener("click", scrollToNow);
 
   timelineWrap.addEventListener("scroll", () => {
-    maybeShiftWindow();
+    if (!pointerActive) {
+      maybeShiftWindow();
+    }
     updateStickyDay();
   });
 
