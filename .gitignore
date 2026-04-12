@@ -1,9 +1,29 @@
 # Python virtual environment
 .venv/
+.venv_*/
+.venv-runtime/
+.env
+.env.*
+!.env.example
 
 # Python cache
 __pycache__/
 *.pyc
+
+# Local runtime data and generated verification output
+data/
+artifacts/
+.vendor/
+.backup/
+.tmp*/
+.edge-headless-*/
+.chrome-headless-*/
+.codex_run_oneul.cmd
+
+# Local source/reference files kept outside the repo history
+RECOVERY_PLAN.md
+*.docx
+*.xlsx
 
 # OS files
 .DS_Store
