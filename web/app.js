@@ -281,6 +281,65 @@ const statusRuntime = window.OneulStatusRuntime.createStatusRuntime(
   createStatusRuntimeBindings()
 );
 
+if (
+  !window.OneulViewActionRuntime ||
+  typeof window.OneulViewActionRuntime.createViewActionRuntime !== "function"
+) {
+  throw new Error("Oneul view action runtime is not available.");
+}
+
+function createViewActionBindings() {
+  return {
+    getTimelineWrap: () => timelineWrap,
+    getDayStackLayer: () => dayStackLayer,
+    getMenuOpen: () => menuOpen,
+    setMenuOpen,
+    getWeatherDrawerOpen: () => weatherDrawerOpen,
+    setWeatherDrawerOpen,
+    getTodayFocusMode: () => todayFocusMode,
+    getTodayFocusHourMode: () => todayFocusHourMode,
+    getDayStackOpen: () => dayStackOpen,
+    getMinutePx: () => minutePx,
+    getDayStackViewMode: () => dayStackViewMode,
+    getDayStackExpandedDate: () => dayStackExpandedDate,
+    getDayStackYearListMode: () => dayStackYearListMode,
+    getPreviousViewState: () => previousViewState,
+    restorePreviousView,
+    enterTodayFocusMode,
+    exitTodayFocusHourMode,
+    focusDateInDayStack,
+    focusTodayInDayStack,
+    todayFocusDate,
+    setStatusNowBtnPointerClientY: (value) => {
+      statusNowBtnPointerClientY = Number.isFinite(value) ? value : null;
+    },
+    isPointerOnVerticalScrollbar,
+    dateTimeFromClientPoint,
+    dayStackDateTimeFromClientPoint,
+    animateMinutePx,
+    collapseExpandedDayStackItem,
+    toggleDayStackViewMode,
+    openWakeTimePreferencePrompt,
+    getGoogleConfigured: () => googleCalendarConfigured,
+    getGoogleConnected: () => googleCalendarConnected,
+    syncGoogleCalendar,
+    showAlert,
+    setDayStackOpen,
+    constants: {
+      BASE_MINUTE_PX,
+      ZOOM_MINUTE_PX,
+      MAX_ZOOM_MINUTE_PX,
+      MINUTE_PX_EPSILON,
+      DAY_STACK_VIEW_MODE_MONTH_DAY,
+      DAY_STACK_VIEW_MODE_YEAR_MONTH,
+    },
+  };
+}
+
+const viewActionRuntime = window.OneulViewActionRuntime.createViewActionRuntime(
+  createViewActionBindings()
+);
+
 function loadPersistedRefreshViewState() {
   try {
     const storage = window.sessionStorage;
@@ -7162,71 +7221,13 @@ function installTodayFocusInlineInteractions() {
 
 function installContextBack() {
   const onContextBack = (e) => {
-    if (!timelineWrap || !timelineWrap.contains(e.target)) return;
-    if (dayStackOpen) {
-      if (isPointerOnVerticalScrollbar(dayStackLayer, e.clientX)) return;
-    } else if (isPointerOnVerticalScrollbar(timelineWrap, e.clientX)) {
-      return;
-    }
+    const handled = viewActionRuntime.handleContextBack({
+      target: e.target,
+      clientX: e.clientX,
+      clientY: e.clientY,
+    });
+    if (!handled) return;
     e.preventDefault();
-    if (todayFocusMode) {
-      if (todayFocusHourMode) {
-        setMenuOpen(false);
-        exitTodayFocusHourMode();
-        return;
-      }
-      setMenuOpen(false);
-      setWeatherDrawerOpen(false);
-      focusDateInDayStack(todayFocusDate(), { expand: true });
-      statusNowBtnPointerClientY = null;
-      return;
-    }
-    const zoomToHalfStepThreshold = (ZOOM_MINUTE_PX + MAX_ZOOM_MINUTE_PX) / 2;
-    if (dayStackOpen) {
-      const anchorDateTime = dayStackDateTimeFromClientPoint(e.clientX, e.clientY);
-      if (minutePx >= zoomToHalfStepThreshold - MINUTE_PX_EPSILON) {
-        animateMinutePx(ZOOM_MINUTE_PX, anchorDateTime, e.clientY);
-        setMenuOpen(false);
-        return;
-      }
-      if (minutePx > BASE_MINUTE_PX + MINUTE_PX_EPSILON) {
-        animateMinutePx(BASE_MINUTE_PX, anchorDateTime, e.clientY);
-        setMenuOpen(false);
-        return;
-      }
-      if (
-        dayStackViewMode === DAY_STACK_VIEW_MODE_MONTH_DAY &&
-        typeof dayStackExpandedDate === "string" &&
-        dayStackExpandedDate
-      ) {
-        collapseExpandedDayStackItem();
-        setMenuOpen(false);
-        return;
-      }
-      if (dayStackViewMode === DAY_STACK_VIEW_MODE_MONTH_DAY) {
-        toggleDayStackViewMode({ centerTarget: true, focusTarget: true });
-        setMenuOpen(false);
-        return;
-      }
-      if (dayStackViewMode === DAY_STACK_VIEW_MODE_YEAR_MONTH && !dayStackYearListMode) {
-        toggleDayStackViewMode({ centerTarget: true, focusTarget: true });
-        setMenuOpen(false);
-        return;
-      }
-      setMenuOpen(false);
-      return;
-    }
-    if (minutePx >= zoomToHalfStepThreshold - MINUTE_PX_EPSILON) {
-      const anchorDateTime = dateTimeFromClientPoint(e.clientX, e.clientY);
-      animateMinutePx(ZOOM_MINUTE_PX, anchorDateTime, e.clientY);
-      return;
-    }
-    if (minutePx > BASE_MINUTE_PX + MINUTE_PX_EPSILON) {
-      const anchorDateTime = dateTimeFromClientPoint(e.clientX, e.clientY);
-      animateMinutePx(BASE_MINUTE_PX, anchorDateTime, e.clientY);
-      return;
-    }
-    restorePreviousView();
   };
   document.addEventListener("contextmenu", onContextBack);
 }
@@ -7277,23 +7278,12 @@ function setWeatherDrawerOpen(nextOpen, options = {}) {
 
 function installStatusMenu() {
   const triggerGoogleCalendarAction = () => {
-    if (!googleCalendarConfigured) {
-      showAlert("Google \uCE98\uB9B0\uB354 \uC124\uC815\uC774 \uD544\uC694\uD569\uB2C8\uB2E4.");
-      return;
-    }
-    if (!googleCalendarConnected) {
-      window.location.assign("/auth/google/start");
-      return;
-    }
-    void syncGoogleCalendar({ force: true });
+    return viewActionRuntime.triggerGoogleCalendarAction();
   };
   let statusNowBtnClickTimer = 0;
 
   const triggerStatusNowBtnAction = (clientY, forceExpand = false) => {
-    setMenuOpen(false);
-    setWeatherDrawerOpen(false);
-    focusTodayInDayStack(clientY, { forceExpand });
-    statusNowBtnPointerClientY = null;
+    return viewActionRuntime.triggerStatusNowAction(clientY, { forceExpand });
   };
 
   if (statusNowBtn) {
@@ -7337,15 +7327,7 @@ function installStatusMenu() {
     statusTodayFeatureBtn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (todayFocusMode) {
-        if (previousViewState) {
-          restorePreviousView();
-        } else {
-          enterTodayFocusMode();
-        }
-        return;
-      }
-      enterTodayFocusMode();
+      viewActionRuntime.toggleTodayFeature();
     });
     statusTodayFeatureBtn.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
@@ -7355,24 +7337,12 @@ function installStatusMenu() {
   }
   if (statusBar) {
     statusBar.addEventListener("click", () => {
-      if (weatherDrawerOpen) {
-        setWeatherDrawerOpen(false);
-        return;
-      }
-      setWeatherDrawerOpen(false);
-      const nextOpen = !menuOpen;
-      setMenuOpen(nextOpen);
+      viewActionRuntime.toggleStatusBarMenu();
     });
     statusBar.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        if (weatherDrawerOpen) {
-          setWeatherDrawerOpen(false);
-          return;
-        }
-        setWeatherDrawerOpen(false);
-        const nextOpen = !menuOpen;
-        setMenuOpen(nextOpen);
+        viewActionRuntime.toggleStatusBarMenu();
       }
     });
   }
@@ -7383,8 +7353,7 @@ function installStatusMenu() {
     statusWeatherTicker.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      setMenuOpen(false);
-      setWeatherDrawerOpen(!weatherDrawerOpen);
+      viewActionRuntime.toggleWeatherDrawer();
     });
     statusWeatherTicker.addEventListener("keydown", (e) => {
       if (e.key !== "Enter" && e.key !== " ") return;
@@ -7398,9 +7367,7 @@ function installStatusMenu() {
     statusWakeTimeBtn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      setMenuOpen(false);
-      setWeatherDrawerOpen(false);
-      openWakeTimePreferencePrompt({ source: "manual" });
+      viewActionRuntime.openWakeTimePreferences();
     });
     statusWakeTimeBtn.addEventListener("keydown", (e) => {
       if (e.key !== "Enter" && e.key !== " ") return;
@@ -7438,25 +7405,7 @@ function installStatusMenu() {
   });
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    if (weatherDrawerOpen) {
-      setWeatherDrawerOpen(false);
-      return;
-    }
-    if (menuOpen) {
-      setMenuOpen(false);
-      return;
-    }
-    if (todayFocusMode) {
-      if (todayFocusHourMode) {
-        exitTodayFocusHourMode();
-        return;
-      }
-      restorePreviousView();
-      return;
-    }
-    if (dayStackOpen) {
-      setDayStackOpen(false, false);
-    }
+    viewActionRuntime.handleEscapeKey();
   });
 }
 
