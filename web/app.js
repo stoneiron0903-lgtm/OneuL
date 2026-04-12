@@ -40,7 +40,7 @@ const TODAY_FOCUS_HOUR_DRAG_STEP_PX = 48;
 const TODAY_FOCUS_HOUR_WHEEL_THRESHOLD = 48;
 const TODAY_FOCUS_HOUR_WHEEL_RESET_MS = 160;
 const ALARM_EXPANDED_HEIGHT_PX = 46;
-const ALARM_ZOOMED_HEIGHT_PX = 16;
+const ALARM_ZOOMED_HEIGHT_PX = 18;
 const ALARM_EXPANDED_GAP_PX = 3;
 const DAY_STACK_INLINE_EDITOR_LONG_PRESS_MS = 300;
 const DAY_STACK_INLINE_EDITOR_STEP_TITLE = 0;
@@ -831,6 +831,12 @@ function setMinutePx(value, anchorDateTime, anchorClientY) {
     }
   }
   minutePx = value;
+  if (timelineWrap) {
+    timelineWrap.classList.toggle(
+      "zooming",
+      Math.abs(minutePx - BASE_MINUTE_PX) >= MINUTE_PX_EPSILON
+    );
+  }
   recalcSizes();
   buildTimeline();
   const dayIndex = Math.floor(timelineAnchorTotalMinutes / DAY_MINUTES);
@@ -1096,6 +1102,18 @@ function scheduleEntryCompactLabel(entry) {
   }
   const titleText = scheduleEntryDisplayTitle(entry);
   return timeText ? `${timeText} \u00b7 ${titleText}` : titleText;
+}
+
+function appendScheduleEntryLabel(label, entry, timeClassName, titleClassName) {
+  if (!label) return;
+  label.textContent = "";
+  const timeEl = document.createElement("div");
+  timeEl.className = timeClassName;
+  timeEl.textContent = scheduleEntryTimeText(entry);
+  const titleEl = document.createElement("div");
+  titleEl.className = titleClassName;
+  titleEl.textContent = scheduleEntryDisplayTitle(entry);
+  label.append(timeEl, titleEl);
 }
 
 function scheduleEntryTimeValue(entry) {
@@ -2528,8 +2546,8 @@ function renderAlarms() {
     if (todayFocusMode) {
       const itemDateKey = todayFocusDateKey();
       const isMaxZoom = minutePx >= MAX_ZOOM_MINUTE_PX - 0.02;
-      const isSlotOpen = minutePx > BASE_MINUTE_PX + MINUTE_PX_EPSILON;
       const showCompactText = minutePx >= ZOOM_MINUTE_PX - MINUTE_PX_EPSILON;
+      const isSlotOpen = showCompactText;
       const visibleAlarms = dayStackVisibleAlarmEntriesForKey(itemDateKey);
       const layoutItems = dayStackAlarmLayoutItemsForKey(itemDateKey, visibleAlarms);
       const renderedBundleKeys = new Set(
@@ -2603,6 +2621,8 @@ function renderAlarms() {
         const entry = item.entry;
         if (isMaxZoom) {
           line.classList.add("expanded");
+        } else if (showCompactText) {
+          line.classList.add("compact");
         }
         line.dataset.source = entry.source;
         if (entry.source === GOOGLE_EVENT_SOURCE) {
@@ -2616,18 +2636,20 @@ function renderAlarms() {
         if (entry.source === LOCAL_EVENT_SOURCE) {
           line.dataset.alarmIndex = String(alarmIndex);
         }
-        const timeText = scheduleEntryTimeText(entry);
         if (isMaxZoom) {
-          label.textContent = "";
-          const timeEl = document.createElement("div");
-          timeEl.className = "dayStackAlarmLine__time";
-          timeEl.textContent = timeText;
-          const titleEl = document.createElement("div");
-          titleEl.className = "dayStackAlarmLine__title";
-          titleEl.textContent = scheduleEntryDisplayTitle(entry);
-          label.append(timeEl, titleEl);
+          appendScheduleEntryLabel(
+            label,
+            entry,
+            "dayStackAlarmLine__time",
+            "dayStackAlarmLine__title"
+          );
         } else if (showCompactText) {
-          label.textContent = scheduleEntryCompactLabel(entry);
+          appendScheduleEntryLabel(
+            label,
+            entry,
+            "dayStackAlarmLine__time",
+            "dayStackAlarmLine__title"
+          );
         } else {
           label.textContent = "";
         }
@@ -2639,6 +2661,7 @@ function renderAlarms() {
       return;
     }
     const isMaxZoom = minutePx >= MAX_ZOOM_MINUTE_PX - 0.02;
+    const showCompactText = minutePx >= ZOOM_MINUTE_PX - MINUTE_PX_EPSILON;
     const visibleAlarms = visibleTimelineScheduleEntries();
     const dayHeaderHeight = timelineDayHeaderHeight();
     const lastBottomByDay = new Map();
@@ -2672,22 +2695,18 @@ function renderAlarms() {
       }
       if (isMaxZoom) {
         line.classList.add("expanded");
+      } else if (showCompactText) {
+        line.classList.add("compact");
       }
       line.dataset.timestamp = String(alarmTime.getTime());
       line.dataset.title = title;
       line.style.top = `${renderY}px`;
       const label = document.createElement("div");
       label.className = "alarm-line__label";
-      const timeText = scheduleEntryTimeText(entry);
       if (isMaxZoom) {
-        label.textContent = "";
-        const timeEl = document.createElement("div");
-        timeEl.className = "alarm-line__time";
-        timeEl.textContent = timeText;
-        const titleEl = document.createElement("div");
-        titleEl.className = "alarm-line__title";
-        titleEl.textContent = scheduleEntryDisplayTitle(entry);
-        label.append(timeEl, titleEl);
+        appendScheduleEntryLabel(label, entry, "alarm-line__time", "alarm-line__title");
+      } else if (showCompactText) {
+        appendScheduleEntryLabel(label, entry, "alarm-line__time", "alarm-line__title");
       } else {
         label.textContent = scheduleEntryCompactLabel(entry);
       }
@@ -2768,7 +2787,8 @@ function renderDayStackAlarms() {
     const body = ensureDayStackItemBodyBuilt(expandedItem);
     if (!body) return;
     const isMaxZoom = minutePx >= MAX_ZOOM_MINUTE_PX - 0.02;
-    const isSlotOpen = minutePx > BASE_MINUTE_PX + MINUTE_PX_EPSILON;
+    const showCompactText = minutePx >= ZOOM_MINUTE_PX - MINUTE_PX_EPSILON;
+    const isSlotOpen = showCompactText;
     const visibleAlarms = dayStackVisibleAlarmEntriesForKey(expandedKey);
     const layoutItems = dayStackAlarmLayoutItemsForKey(expandedKey, visibleAlarms);
     const renderedBundleKeys = new Set(
@@ -2778,7 +2798,6 @@ function renderDayStackAlarms() {
       dayStackAlarmBundleOpenKey = "";
     }
     const displayHeight = Math.max(2, dayStackAlarmDisplayHeight());
-    const showCompactText = minutePx >= ZOOM_MINUTE_PX - MINUTE_PX_EPSILON;
     layoutItems.forEach((item) => {
       const line = document.createElement("div");
       line.className = "dayStackAlarmLine";
@@ -2843,6 +2862,8 @@ function renderDayStackAlarms() {
       const entry = item.entry;
       if (isMaxZoom) {
         line.classList.add("expanded");
+      } else if (showCompactText) {
+        line.classList.add("compact");
       }
       line.dataset.source = entry.source;
       if (entry.source === GOOGLE_EVENT_SOURCE) {
@@ -2856,18 +2877,20 @@ function renderDayStackAlarms() {
       if (entry.source === LOCAL_EVENT_SOURCE) {
         line.dataset.alarmIndex = String(alarmIndex);
       }
-      const timeText = scheduleEntryTimeText(entry);
       if (isMaxZoom) {
-        label.textContent = "";
-        const timeEl = document.createElement("div");
-        timeEl.className = "dayStackAlarmLine__time";
-        timeEl.textContent = timeText;
-        const titleEl = document.createElement("div");
-        titleEl.className = "dayStackAlarmLine__title";
-        titleEl.textContent = scheduleEntryDisplayTitle(entry);
-        label.append(timeEl, titleEl);
+        appendScheduleEntryLabel(
+          label,
+          entry,
+          "dayStackAlarmLine__time",
+          "dayStackAlarmLine__title"
+        );
       } else if (showCompactText) {
-        label.textContent = scheduleEntryCompactLabel(entry);
+        appendScheduleEntryLabel(
+          label,
+          entry,
+          "dayStackAlarmLine__time",
+          "dayStackAlarmLine__title"
+        );
       } else {
         label.textContent = "";
       }
@@ -4285,7 +4308,7 @@ function dayStackInlineEditorLayoutForKey(itemDateKey = "") {
 }
 
 function dayStackAlarmDisplayHeight() {
-  if (minutePx <= BASE_MINUTE_PX + MINUTE_PX_EPSILON) return 0;
+  if (minutePx < ZOOM_MINUTE_PX - MINUTE_PX_EPSILON) return 0;
   if (minutePx >= MAX_ZOOM_MINUTE_PX - 0.02) return ALARM_EXPANDED_HEIGHT_PX;
   return ALARM_ZOOMED_HEIGHT_PX;
 }

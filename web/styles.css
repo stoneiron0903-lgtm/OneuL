@@ -2658,7 +2658,7 @@ body {
 }
 
 #timelineWrap.zooming .dayStackAlarmLine:not(.compact):not(.expanded) {
-  --alarm-height: 16px;
+  --alarm-height: 18px;
 }
 
 #timelineWrap.zooming .dayStackAlarmLine.expanded {
@@ -3097,7 +3097,7 @@ body {
 }
 
 #timelineWrap.zooming .alarm-line:not(.compact):not(.expanded) {
-  --alarm-height: 16px;
+  --alarm-height: 18px;
 }
 
 #timelineWrap.zooming .alarm-line.expanded {
