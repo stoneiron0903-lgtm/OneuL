@@ -42,12 +42,17 @@ def run_script(script_name: str, *, retries: int = 0) -> dict[str, object]:
     command = [sys.executable, str(Path(__file__).resolve().parent / script_name)]
     attempt = 0
     result: dict[str, object] | None = None
+    env = os.environ.copy()
+    if script_name in BROWSER_VERIFY_SCRIPTS:
+        env["ONEUL_CDP_PORT"] = str(CDP_PORT)
+        env.setdefault("ONEUL_CDP_EXISTING", "1")
 
     while attempt <= retries:
         attempt += 1
         completed = subprocess.run(
             command,
             cwd=str(ROOT_DIR),
+            env=env,
             capture_output=True,
             text=True,
             encoding="utf-8",
