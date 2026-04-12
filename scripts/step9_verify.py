@@ -18,12 +18,24 @@ def main() -> int:
         weather_state = page_session.evaluate(
             """
             (async () => {
-              weatherCoords = { latitude: 37.5665, longitude: 126.9780, label: "?쒖슱" };
-              await refreshWeatherStatus();
               const response = await fetch("/api/weather/status?latitude=37.5665&longitude=126.9780", {
                 cache: "no-store",
               });
               const payload = await response.json();
+              const expectedLine = typeof payload.line === "string" ? payload.line.trim() : "";
+
+              weatherCoords = { latitude: 37.5665, longitude: 126.9780, label: "Seoul" };
+              await refreshWeatherStatus();
+
+              for (let attempt = 0; attempt < 100; attempt += 1) {
+                const tickerText = document.getElementById("statusWeatherTickerText")?.textContent || "";
+                const drawerText = document.getElementById("weatherDrawerText")?.textContent || "";
+                if (expectedLine && tickerText.trim() === expectedLine && drawerText.trim() === expectedLine) {
+                  break;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 100));
+              }
+
               return {
                 tickerText: document.getElementById("statusWeatherTickerText")?.textContent || "",
                 drawerText: document.getElementById("weatherDrawerText")?.textContent || "",
@@ -31,6 +43,7 @@ def main() -> int:
                 ariaExpanded: document.getElementById("statusWeatherTicker")?.getAttribute("aria-expanded") || "",
                 provider: payload.provider || null,
                 line: payload.line || "",
+                expectedLine,
               };
             })()
             """,
@@ -86,14 +99,20 @@ def main() -> int:
         )
         page_session.screenshot(fallback_shot)
 
+        expected_line = str(weather_state.get("expectedLine") or "").strip()
+        ticker_text = str(weather_state.get("tickerText") or "").strip()
+        drawer_text = str(weather_state.get("drawerText") or "").strip()
+        provider = weather_state.get("provider")
+
         result = {
             "pass": bool(drawer_ok)
             and isinstance(weather_state, dict)
-            and bool(str(weather_state.get("tickerText") or "").strip())
-            and bool(str(weather_state.get("drawerText") or "").strip())
-            and isinstance(weather_state.get("provider"), dict)
-            and weather_state["provider"].get("weather") == "open-meteo"
-            and weather_state["provider"].get("air") == "open-meteo",
+            and bool(expected_line)
+            and ticker_text == expected_line
+            and drawer_text == expected_line
+            and isinstance(provider, dict)
+            and provider.get("weather") == "open-meteo"
+            and provider.get("air") == "open-meteo",
             "issues": [],
             "proof_files": [
                 ticker_shot.name,
@@ -108,11 +127,16 @@ def main() -> int:
         }
         if not drawer_ok:
             result["issues"].append("weather_drawer_open_failed")
-        if not str(weather_state.get("tickerText") or "").strip():
+        if not ticker_text:
             result["issues"].append("weather_ticker_empty")
-        if not str(weather_state.get("drawerText") or "").strip():
+        if not drawer_text:
             result["issues"].append("weather_drawer_text_empty")
-        provider = weather_state.get("provider")
+        if not expected_line:
+            result["issues"].append("weather_api_line_empty")
+        if ticker_text != expected_line:
+            result["issues"].append("weather_ticker_line_mismatch")
+        if drawer_text != expected_line:
+            result["issues"].append("weather_drawer_line_mismatch")
         if not isinstance(provider, dict) or provider.get("weather") != "open-meteo" or provider.get("air") != "open-meteo":
             result["issues"].append("weather_fallback_provider_unexpected")
 
