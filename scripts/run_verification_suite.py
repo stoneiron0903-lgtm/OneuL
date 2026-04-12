@@ -13,6 +13,7 @@ from verify_artifacts import write_named_json_report
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 CDP_PORT = int(os.getenv("ONEUL_CDP_PORT", "9224"))
+REQUIRE_CDP = os.getenv("ONEUL_REQUIRE_CDP", "").strip() in {"1", "true", "True"}
 TRANSIENT_BROWSER_RETRY_COUNT = 1
 TRANSIENT_BROWSER_RETRY_DELAY_SEC = 1.0
 BROWSER_VERIFY_SCRIPTS = {
@@ -80,6 +81,7 @@ def main() -> int:
     summary: dict[str, object] = {
         "pass": False,
         "cdp_port": CDP_PORT,
+        "cdp_required": REQUIRE_CDP,
         "runs": [],
         "skipped": [],
     }
@@ -129,7 +131,9 @@ def main() -> int:
         )
 
     summary["runs"] = runs
-    summary["pass"] = all(bool(item.get("passed")) for item in runs)
+    summary["pass"] = all(bool(item.get("passed")) for item in runs) and (
+        cdp_ready or not REQUIRE_CDP
+    )
     write_named_json_report("verification_suite", summary)
     print(json.dumps(summary, ensure_ascii=True, indent=2))
     return 0 if summary["pass"] else 1

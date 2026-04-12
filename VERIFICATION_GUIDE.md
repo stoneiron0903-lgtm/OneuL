@@ -50,10 +50,18 @@ Behavior:
 - Runs `step7_verify.py`, `step9_verify.py`, and `step10_verify.py` when a CDP browser is available on port `9224`
 - Retries a browser verifier once when a transient CDP `Runtime.evaluate timed out` failure occurs
 - Skips `step8_verify.py` unless `ONEUL_RUN_STEP8=1` is set
+- Set `ONEUL_REQUIRE_CDP=1` for final freeze checks so missing browser verification fails the suite instead of being reported as a skip-only pass
 
 Example:
 
 ```powershell
 $env:ONEUL_RUN_STEP8='1'
+.\.venv_runtime\Scripts\python.exe scripts\run_verification_suite.py
+```
+
+Final freeze example:
+
+```powershell
+$env:ONEUL_REQUIRE_CDP='1'
 .\.venv_runtime\Scripts\python.exe scripts\run_verification_suite.py
 ```
