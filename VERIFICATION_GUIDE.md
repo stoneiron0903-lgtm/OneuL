@@ -48,6 +48,7 @@ Behavior:
 
 - Always runs `api_smoke_verify.py` and `google_smoke_verify.py`
 - Runs `step7_verify.py`, `step9_verify.py`, and `step10_verify.py` when a CDP browser is available on port `9224`
+- Retries a browser verifier once when a transient CDP `Runtime.evaluate timed out` failure occurs
 - Skips `step8_verify.py` unless `ONEUL_RUN_STEP8=1` is set
 
 Example:
