@@ -29,6 +29,7 @@ def main() -> int:
         inline_shot = proof_path("verify-step10-inline-editor.png")
         keyboard_shot = proof_path("verify-step10-keyboard-month-rail.png")
         zoom_shot = proof_path("verify-step10-zoom-backflow.png")
+        dblclick_readable_shot = proof_path("verify-step10-dblclick-readable-zoom.png")
 
         refresh_state_before = session.evaluate(
             """
@@ -347,6 +348,173 @@ def main() -> int:
         if not zoom_prepare or not zoom_step1 or not zoom_half_ok or not zoom_base_ok:
             results["issues"].append("zoom_backflow_failed")
 
+        dblclick_readable_state = session.evaluate(
+            """
+            (async () => {
+              const title = "Step10 Dblclick Readable";
+              const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+              const removeTestAlarms = () => {
+                for (let index = alarms.length - 1; index >= 0; index -= 1) {
+                  const alarm = alarms[index];
+                  if (alarm && !(alarm instanceof Date) && alarm.title === title) {
+                    alarms.splice(index, 1);
+                  }
+                }
+              };
+              const readLineState = (selector) => {
+                const line = document.querySelector(selector);
+                if (!(line instanceof HTMLElement)) {
+                  return { exists: false };
+                }
+                const label = line.querySelector(".dayStackAlarmLine__label, .alarm-line__label");
+                const labelStyle = label ? getComputedStyle(label) : null;
+                const rect = line.getBoundingClientRect();
+                return {
+                  exists: true,
+                  className: line.className,
+                  compact: line.classList.contains("compact"),
+                  expanded: line.classList.contains("expanded"),
+                  height: rect.height,
+                  text: (line.textContent || "").trim(),
+                  opacity: labelStyle ? Number(labelStyle.opacity) : null,
+                  labelDisplay: labelStyle ? labelStyle.display : "",
+                };
+              };
+              const dispatchDblClick = (element, clientX, clientY) => {
+                element.dispatchEvent(
+                  new MouseEvent("dblclick", {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX,
+                    clientY,
+                  })
+                );
+              };
+              const waitForMinutePx = async (target) => {
+                for (let attempt = 0; attempt < 20; attempt += 1) {
+                  if (Math.abs(minutePx - target) < 0.01) return true;
+                  await delay(50);
+                }
+                return Math.abs(minutePx - target) < 0.01;
+              };
+              const isReadableCompact = (state) => Boolean(
+                state &&
+                state.exists &&
+                state.compact &&
+                !state.expanded &&
+                Number(state.height) >= ALARM_ZOOMED_HEIGHT_PX - 0.5 &&
+                Number(state.opacity) >= 0.95 &&
+                String(state.text || "").includes(title)
+              );
+              const heightGrew = (before, after) => Boolean(
+                before &&
+                after &&
+                Number(after.height) >= Number(before.height) + 4
+              );
+
+              removeTestAlarms();
+              const today = startOfDay(new Date());
+              const alarmTime = new Date(
+                today.getFullYear(),
+                today.getMonth(),
+                today.getDate(),
+                10,
+                15,
+                0,
+                0
+              );
+              alarms.push({ time: alarmTime, title });
+
+              focusDateInDayStack(today, { expand: true });
+              let stackRect = dayStackLayer.getBoundingClientRect();
+              setMinutePx(BASE_MINUTE_PX, null, stackRect.top + stackRect.height / 2);
+              renderDayStackAlarms();
+              await delay(80);
+              const dayBefore = readLineState(
+                `#dayStackLayer .dayStackAlarmLine[data-title="${title}"]`
+              );
+              const body = document.querySelector("#dayStackLayer .dayStackItem.expanded .dayStackBody");
+              let dayTriggered = false;
+              let dayHit = null;
+              let dayZoomed = false;
+              if (body instanceof HTMLElement) {
+                stackRect = dayStackLayer.getBoundingClientRect();
+                const bodyRect = body.getBoundingClientRect();
+                const visibleTop = Math.max(bodyRect.top, stackRect.top + 2);
+                const visibleBottom = Math.min(bodyRect.bottom, stackRect.bottom - 2);
+                const clientX = bodyRect.left + bodyRect.width * 0.5;
+                const clientY =
+                  visibleBottom > visibleTop
+                    ? (visibleTop + visibleBottom) * 0.5
+                    : stackRect.top + stackRect.height * 0.5;
+                const hit = document.elementFromPoint(clientX, clientY);
+                dayHit = hit ? { tag: hit.tagName, className: hit.className || "" } : null;
+                dispatchDblClick(
+                  body,
+                  clientX,
+                  clientY
+                );
+                dayTriggered = true;
+                dayZoomed = await waitForMinutePx(ZOOM_MINUTE_PX);
+              }
+              const dayAfter = readLineState(
+                `#dayStackLayer .dayStackAlarmLine[data-title="${title}"]`
+              );
+
+              setDayStackOpen(false);
+              setTodayFocusMode(true);
+              const wrapRect = timelineWrap.getBoundingClientRect();
+              setMinutePx(BASE_MINUTE_PX, null, wrapRect.top + wrapRect.height / 2);
+              buildTimeline();
+              await delay(80);
+              const todayBefore = readLineState(
+                `#timeline > .dayStackAlarmLine[data-title="${title}"]`
+              );
+              const nextWrapRect = timelineWrap.getBoundingClientRect();
+              dispatchDblClick(
+                timelineWrap,
+                nextWrapRect.left + nextWrapRect.width * 0.5,
+                nextWrapRect.top + nextWrapRect.height * 0.5
+              );
+              const todayZoomed = await waitForMinutePx(ZOOM_MINUTE_PX);
+              const todayAfter = readLineState(
+                `#timeline > .dayStackAlarmLine[data-title="${title}"]`
+              );
+
+              return {
+                title,
+                day: {
+                  triggered: dayTriggered,
+                  hit: dayHit,
+                  zoomed: dayZoomed,
+                  before: dayBefore,
+                  after: dayAfter,
+                  heightGrew: heightGrew(dayBefore, dayAfter),
+                  ok: dayTriggered && dayZoomed && heightGrew(dayBefore, dayAfter) && isReadableCompact(dayAfter),
+                },
+                todayFocus: {
+                  zoomed: todayZoomed,
+                  before: todayBefore,
+                  after: todayAfter,
+                  heightGrew: heightGrew(todayBefore, todayAfter),
+                  ok: todayZoomed && heightGrew(todayBefore, todayAfter) && isReadableCompact(todayAfter),
+                },
+                minutePx,
+                expectedZoomHeight: ALARM_ZOOMED_HEIGHT_PX,
+              };
+            })()
+            """,
+            timeout=20.0,
+        )
+        session.screenshot(dblclick_readable_shot)
+        results["proof_files"].append(dblclick_readable_shot.name)
+        if (
+            not dblclick_readable_state
+            or not dblclick_readable_state.get("day", {}).get("ok")
+            or not dblclick_readable_state.get("todayFocus", {}).get("ok")
+        ):
+            results["issues"].append("dblclick_readable_zoom_failed")
+
         results["summary"] = {
             "refresh_before": refresh_state_before,
             "refresh_after": refresh_state_after,
@@ -370,6 +538,7 @@ def main() -> int:
                 "half_ok": zoom_half_ok,
                 "base_ok": zoom_base_ok,
             },
+            "dblclick_readable": dblclick_readable_state,
         }
         results["pass"] = len(results["issues"]) == 0
         write_named_json_report("step10_verify", results)
