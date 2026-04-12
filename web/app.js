@@ -340,6 +340,73 @@ const viewActionRuntime = window.OneulViewActionRuntime.createViewActionRuntime(
   createViewActionBindings()
 );
 
+if (
+  !window.OneulTodayFocusRuntime ||
+  typeof window.OneulTodayFocusRuntime.createTodayFocusRuntime !== "function"
+) {
+  throw new Error("Oneul today focus runtime is not available.");
+}
+
+function createTodayFocusBindings() {
+  return {
+    getTimelineWrap: () => timelineWrap,
+    getTimeline: () => timeline,
+    getTodayFocusRail: () => todayFocusRail,
+    getStatusTodayFeatureBtn: () => statusTodayFeatureBtn,
+    getStartDate: () => startDate,
+    setStartDate: (value) => {
+      startDate = value;
+    },
+    getTodayFocusMode: () => todayFocusMode,
+    setTodayFocusModeState: (value) => {
+      todayFocusMode = Boolean(value);
+    },
+    getTodayFocusHourMode: () => todayFocusHourMode,
+    setTodayFocusHourModeState: (value) => {
+      todayFocusHourMode = Boolean(value);
+    },
+    getTodayFocusPreferredMinutePx: () => todayFocusPreferredMinutePx,
+    setTodayFocusPreferredMinutePx: (value) => {
+      todayFocusPreferredMinutePx = Number.isFinite(value) ? value : null;
+    },
+    setTodayFocusHourStartMinute: (value) => {
+      todayFocusHourStartMinute = value;
+    },
+    getDayStackOpen: () => dayStackOpen,
+    setMenuOpen,
+    setWeatherDrawerOpen,
+    hideHoverGuide,
+    hideSelectionElements,
+    clearDayStackInlineDraft,
+    setDayStackOpen,
+    rememberPreviousView,
+    recalcSizes,
+    buildTimeline,
+    alignTimelineToDateTime,
+    updateTodayFocusRail,
+    updateTodayFocusRailLayout,
+    updateStickyDay,
+    updateTime,
+    persistRefreshViewState,
+    todayFocusDate,
+    todayFocusHeaderHeight,
+    todayFocusHourVerticalPadding,
+    todayFocusSelectedHourStartMinute,
+    todayFocusRenderedYForBaseY,
+    startOfDay,
+    constants: {
+      DAY_MINUTES,
+      TODAY_FOCUS_HOUR_STEP_MINUTES,
+      BASE_MINUTE_PX,
+      getMinutePx: () => minutePx,
+    },
+  };
+}
+
+const todayFocusRuntime = window.OneulTodayFocusRuntime.createTodayFocusRuntime(
+  createTodayFocusBindings()
+);
+
 function loadPersistedRefreshViewState() {
   try {
     const storage = window.sessionStorage;
@@ -2928,6 +2995,7 @@ function updateTodayFocusRail() {
 }
 
 function todayFocusHourScrollBounds() {
+  return todayFocusRuntime.todayFocusHourScrollBounds();
   if (!timelineWrap || !timeline) {
     return { min: 0, max: 0 };
   }
@@ -2954,12 +3022,14 @@ function todayFocusHourScrollBounds() {
 }
 
 function clampTodayFocusScrollTop(nextTop) {
+  return todayFocusRuntime.clampTodayFocusScrollTop(nextTop);
   if (!timelineWrap) return 0;
   const { min, max } = todayFocusHourScrollBounds();
   return Math.max(min, Math.min(max, Number.isFinite(nextTop) ? nextTop : min));
 }
 
 function enforceTodayFocusScrollBounds() {
+  return todayFocusRuntime.enforceTodayFocusScrollBounds();
   if (!todayFocusMode || !timelineWrap) return;
   const clamped = clampTodayFocusScrollTop(timelineWrap.scrollTop);
   if (Math.abs(clamped - timelineWrap.scrollTop) > 0.5) {
@@ -2968,6 +3038,7 @@ function enforceTodayFocusScrollBounds() {
 }
 
 function setTodayFocusHourMode(nextMode, anchorDateTime = null) {
+  return todayFocusRuntime.setTodayFocusHourMode(nextMode, anchorDateTime);
   const shouldEnable = Boolean(nextMode);
   if (shouldEnable) {
     const anchor =
@@ -2987,6 +3058,7 @@ function setTodayFocusHourMode(nextMode, anchorDateTime = null) {
 }
 
 function enterTodayFocusHourMode(anchorDateTime = null, anchorClientY = null) {
+  return todayFocusRuntime.enterTodayFocusHourMode(anchorDateTime, anchorClientY);
   if (!todayFocusMode || dayStackOpen || !timelineWrap) return false;
   setTodayFocusHourMode(true, anchorDateTime);
   recalcSizes();
@@ -3006,6 +3078,7 @@ function enterTodayFocusHourMode(anchorDateTime = null, anchorClientY = null) {
 }
 
 function shiftTodayFocusHour(stepDelta = 0) {
+  return todayFocusRuntime.shiftTodayFocusHour(stepDelta);
   if (!todayFocusMode || !todayFocusHourMode || dayStackOpen) return false;
   const delta = Number.isFinite(stepDelta) ? Math.trunc(stepDelta) : 0;
   if (!delta) return false;
@@ -3032,6 +3105,7 @@ function shiftTodayFocusHour(stepDelta = 0) {
 }
 
 function exitTodayFocusHourMode() {
+  return todayFocusRuntime.exitTodayFocusHourMode();
   if (!todayFocusMode || !todayFocusHourMode || dayStackOpen || !timelineWrap) return false;
   setTodayFocusHourMode(false);
   recalcSizes();
@@ -3045,6 +3119,7 @@ function exitTodayFocusHourMode() {
 }
 
 function refreshTodayFocusTimelineLayout() {
+  return todayFocusRuntime.refreshTodayFocusTimelineLayout();
   if (!todayFocusMode || dayStackOpen || !timelineWrap || !timeline) return false;
   const previousScrollTop = Math.max(0, timelineWrap.scrollTop);
   buildTimeline();
@@ -3062,6 +3137,7 @@ function refreshTodayFocusTimelineLayout() {
 }
 
 function setTodayFocusMode(nextMode, options = {}) {
+  return todayFocusRuntime.setTodayFocusMode(nextMode, options);
   const shouldEnable = Boolean(nextMode);
   const rebuildTimeline = options.rebuildTimeline !== false;
   if (shouldEnable && !todayFocusMode) {
@@ -3090,6 +3166,7 @@ function setTodayFocusMode(nextMode, options = {}) {
 }
 
 function enterTodayFocusMode(targetDate = null) {
+  return todayFocusRuntime.enterTodayFocusMode(targetDate);
   const focusDate =
     targetDate instanceof Date && Number.isFinite(targetDate.getTime())
       ? startOfDay(targetDate)
