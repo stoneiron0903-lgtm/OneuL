@@ -39,6 +39,11 @@ def main() -> int:
             "proof_files": [],
         }
 
+        def finish(returncode: int) -> int:
+            write_named_json_report("step8_verify", result)
+            print(json.dumps(result, ensure_ascii=True, indent=2))
+            return returncode
+
         status_shot = proof_path("verify-step8-google-status.png")
         connected_shot = proof_path("verify-step8-google-connected.png")
         create_shot = proof_path("verify-step8-google-create.png")
@@ -72,8 +77,7 @@ def main() -> int:
                 "initial": initial_state,
                 "oauth_tabs": oauth_tabs(browser_session),
             }
-            print(json.dumps(result, ensure_ascii=True, indent=2))
-            return 1
+            return finish(1)
 
         if not bool(initial_state.get("connected")):
             result["issues"].append("google_not_connected")
@@ -81,8 +85,7 @@ def main() -> int:
                 "initial": initial_state,
                 "oauth_tabs": oauth_tabs(browser_session),
             }
-            print(json.dumps(result, ensure_ascii=True, indent=2))
-            return 1
+            return finish(1)
 
         fetch_start = (datetime.now(timezone.utc) - timedelta(days=2)).replace(microsecond=0)
         fetch_end = (datetime.now(timezone.utc) + timedelta(days=30)).replace(microsecond=0)
@@ -294,9 +297,7 @@ def main() -> int:
             "oauth_tabs": oauth_tabs(browser_session),
         }
         result["pass"] = len(result["issues"]) == 0
-        write_named_json_report("step8_verify", result)
-        print(json.dumps(result, ensure_ascii=True, indent=2))
-        return 0 if result["pass"] else 1
+        return finish(0 if result["pass"] else 1)
 
 
 if __name__ == "__main__":

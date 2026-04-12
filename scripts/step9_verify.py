@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 
 from verify_artifacts import proof_path, write_named_json_report
 from verify_cdp_support import APP_URL, attach_new_page, open_browser_connection, wait_for_app_ready
+
+
+EXPECTED_WEATHER_PROVIDER = os.getenv("ONEUL_EXPECT_WEATHER_PROVIDER", "open-meteo").strip() or "open-meteo"
+EXPECTED_AIR_PROVIDER = os.getenv("ONEUL_EXPECT_AIR_PROVIDER", "open-meteo").strip() or "open-meteo"
 
 
 def main() -> int:
@@ -111,8 +116,8 @@ def main() -> int:
             and ticker_text == expected_line
             and drawer_text == expected_line
             and isinstance(provider, dict)
-            and provider.get("weather") == "open-meteo"
-            and provider.get("air") == "open-meteo",
+            and provider.get("weather") == EXPECTED_WEATHER_PROVIDER
+            and provider.get("air") == EXPECTED_AIR_PROVIDER,
             "issues": [],
             "proof_files": [
                 ticker_shot.name,
@@ -123,6 +128,10 @@ def main() -> int:
                 "initial": weather_state,
                 "drawer_ok": drawer_ok,
                 "fallback": fallback_state,
+                "expectedProvider": {
+                    "weather": EXPECTED_WEATHER_PROVIDER,
+                    "air": EXPECTED_AIR_PROVIDER,
+                },
             },
         }
         if not drawer_ok:
@@ -137,7 +146,11 @@ def main() -> int:
             result["issues"].append("weather_ticker_line_mismatch")
         if drawer_text != expected_line:
             result["issues"].append("weather_drawer_line_mismatch")
-        if not isinstance(provider, dict) or provider.get("weather") != "open-meteo" or provider.get("air") != "open-meteo":
+        if (
+            not isinstance(provider, dict)
+            or provider.get("weather") != EXPECTED_WEATHER_PROVIDER
+            or provider.get("air") != EXPECTED_AIR_PROVIDER
+        ):
             result["issues"].append("weather_fallback_provider_unexpected")
 
         write_named_json_report("step9_verify", result)

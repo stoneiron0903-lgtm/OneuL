@@ -37,6 +37,23 @@ Notes:
 
 - The script validates `connected`, `fetch`, `create`, and `disconnect`
 - It intentionally ends by disconnecting the app session
+- If Google is configured but not connected, the script exits non-zero and still writes `artifacts/reports/step8_verify.json` with `google_not_connected`
+
+## Step 9 Enhanced Providers
+
+`step9_verify.py` defaults to Open-Meteo fallback expectations:
+
+```powershell
+.\.venv_runtime\Scripts\python.exe scripts\step9_verify.py
+```
+
+After restarting the app with `KMA_SERVICE_KEY` and `AIRKOREA_SERVICE_KEY`, require the Korea providers explicitly:
+
+```powershell
+$env:ONEUL_EXPECT_WEATHER_PROVIDER='kma'
+$env:ONEUL_EXPECT_AIR_PROVIDER='airkorea'
+.\.venv_runtime\Scripts\python.exe scripts\step9_verify.py
+```
 
 ## Suite runner
 
