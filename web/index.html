@@ -4,15 +4,44 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Oneul Web</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=20260410-2036" />
   </head>
   <body>
     <div id="app">
+      <div id="weatherDrawer" aria-hidden="true">
+        <div id="weatherDrawerText" aria-live="polite">날씨 정보를 불러오는 중...</div>
+      </div>
+      <div id="statusBar" role="button" tabindex="0" aria-expanded="false" aria-controls="menuBar">
+        <div id="statusLeftGroup">
+          <div id="statusDateText"></div>
+          <button
+            id="statusWeatherTicker"
+            type="button"
+            aria-label="날씨 상세 보기"
+            aria-controls="weatherDrawer"
+            aria-expanded="false"
+          >
+            <span id="statusWeatherTickerText">날씨 정보를 불러오는 중...</span>
+          </button>
+          <button id="statusGoogleBtn" type="button" aria-label="Google 캘린더">G</button>
+          <button id="statusWakeTimeBtn" type="button" aria-label="기상 시간 설정">기상</button>
+        </div>
+        <div id="statusCenterGroup">
+          <button id="statusNowBtn" type="button">.OneuL</button>
+          <button id="statusTodayFeatureBtn" type="button" aria-label="오늘 집중 기능">Td</button>
+        </div>
+        <div id="statusTimeText"></div>
+      </div>
+      <div id="menuBar" aria-hidden="true">
+        <div id="menuCalendar" aria-label="월간 달력"></div>
+      </div>
       <header id="header">
         <button id="dateLabel" type="button" aria-label="오늘로 이동"></button>
         <div id="timeLabel"></div>
       </header>
       <div id="timelineWrap">
+        <div id="todayFocusRail" aria-hidden="true"></div>
+        <div id="dayStackLayer" aria-hidden="true"></div>
         <div id="stickyDay"></div>
         <div id="timeline">
           <div id="nowLine">
@@ -23,6 +52,7 @@
         </div>
       </div>
     </div>
-    <script src="app.js"></script>
+    <script src="/status_runtime.js?v=20260412-0010"></script>
+    <script src="/app.js?v=20260412-0010"></script>
   </body>
 </html>
