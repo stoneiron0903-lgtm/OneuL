@@ -319,6 +319,15 @@ def main() -> int:
         )
         session.evaluate(
             """
+            (async () => {
+              await new Promise((resolve) => setTimeout(resolve, 430));
+              return true;
+            })()
+            """,
+            timeout=10.0,
+        )
+        session.evaluate(
+            """
             (() => {
               const wrap = document.getElementById("dayStackLayer");
               const rect = wrap.getBoundingClientRect();
@@ -343,9 +352,48 @@ def main() -> int:
             timeout=10.0,
             interval=0.1,
         )
+        context_double_right_click_state = session.evaluate(
+            """
+            (async () => {
+              await new Promise((resolve) => setTimeout(resolve, 430));
+              focusDateInDayStack(startOfDay(new Date()), { expand: true });
+              const anchorY = dayStackLayer.getBoundingClientRect().top + dayStackLayer.clientHeight / 2;
+              setMinutePx(MAX_ZOOM_MINUTE_PX, null, anchorY);
+              await new Promise((resolve) => setTimeout(resolve, 80));
+              const before = minutePx;
+              const wrap = document.getElementById("dayStackLayer");
+              const rect = wrap.getBoundingClientRect();
+              const eventInit = {
+                bubbles: true,
+                cancelable: true,
+                button: 2,
+                buttons: 2,
+                clientX: rect.left + rect.width * 0.5,
+                clientY: rect.top + rect.height * 0.5,
+              };
+              wrap.dispatchEvent(new MouseEvent("contextmenu", eventInit));
+              wrap.dispatchEvent(new MouseEvent("contextmenu", eventInit));
+              await new Promise((resolve) => setTimeout(resolve, 250));
+              return {
+                before,
+                after: minutePx,
+                expected: ZOOM_MINUTE_PX,
+                ok: Math.abs(minutePx - ZOOM_MINUTE_PX) < 0.01 && dayStackOpen,
+              };
+            })()
+            """,
+            timeout=20.0,
+        )
         session.screenshot(zoom_shot)
         results["proof_files"].append(zoom_shot.name)
-        if not zoom_prepare or not zoom_step1 or not zoom_half_ok or not zoom_base_ok:
+        if (
+            not zoom_prepare
+            or not zoom_step1
+            or not zoom_half_ok
+            or not zoom_base_ok
+            or not context_double_right_click_state
+            or not context_double_right_click_state.get("ok")
+        ):
             results["issues"].append("zoom_backflow_failed")
 
         dblclick_readable_state = session.evaluate(
@@ -613,6 +661,7 @@ def main() -> int:
                 "prepare": zoom_prepare,
                 "half_ok": zoom_half_ok,
                 "base_ok": zoom_base_ok,
+                "double_right_click": context_double_right_click_state,
             },
             "dblclick_readable": dblclick_readable_state,
         }
