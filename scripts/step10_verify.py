@@ -352,6 +352,8 @@ def main() -> int:
             """
             (async () => {
               const title = "Step10 Dblclick Readable";
+              const anchorMinutes = 10 * 60;
+              const anchorTolerancePx = 2.5;
               const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
               const removeTestAlarms = () => {
                 for (let index = alarms.length - 1; index >= 0; index -= 1) {
@@ -390,6 +392,40 @@ def main() -> int:
                   })
                 );
               };
+              const dayStackMinuteClientY = (itemDateKey, minutes) => {
+                const item = dayStackLayer.querySelector(`.dayStackItem[data-date="${itemDateKey}"]`);
+                const body = item ? item.querySelector(".dayStackBody") : null;
+                if (!(body instanceof HTMLElement)) return NaN;
+                return (
+                  body.getBoundingClientRect().top +
+                  dayStackRenderedYForItem(minutes * minutePx, itemDateKey)
+                );
+              };
+              const scrollDayStackMinuteToClientY = async (itemDateKey, minutes, targetClientY) => {
+                const before = dayStackMinuteClientY(itemDateKey, minutes);
+                if (!Number.isFinite(before)) return NaN;
+                setDayStackScrollTop(dayStackLayer.scrollTop + before - targetClientY);
+                await delay(80);
+                return dayStackMinuteClientY(itemDateKey, minutes);
+              };
+              const todayFocusMinuteClientY = (minutes) => {
+                if (!timeline) return NaN;
+                return (
+                  timeline.getBoundingClientRect().top +
+                  todayFocusRenderedYForBaseY(minutes * minutePx)
+                );
+              };
+              const scrollTodayFocusMinuteToClientY = async (minutes, targetClientY) => {
+                const before = todayFocusMinuteClientY(minutes);
+                if (!Number.isFinite(before)) return NaN;
+                const maxScroll = Math.max(0, timeline.scrollHeight - timelineWrap.clientHeight);
+                timelineWrap.scrollTop = Math.max(
+                  0,
+                  Math.min(maxScroll, timelineWrap.scrollTop + before - targetClientY)
+                );
+                await delay(80);
+                return todayFocusMinuteClientY(minutes);
+              };
               const waitForMinutePx = async (target) => {
                 for (let attempt = 0; attempt < 20; attempt += 1) {
                   if (Math.abs(minutePx - target) < 0.01) return true;
@@ -411,15 +447,24 @@ def main() -> int:
                 after &&
                 Number(after.height) >= Number(before.height) + 4
               );
+              const anchorKept = (before, after) => Boolean(
+                Number.isFinite(before) &&
+                Number.isFinite(after) &&
+                Math.abs(after - before) <= anchorTolerancePx
+              );
 
+              if (typeof hideModal === "function") {
+                hideModal();
+              }
               removeTestAlarms();
               const today = startOfDay(new Date());
+              const todayKey = dateKeyFromDate(today);
               const alarmTime = new Date(
                 today.getFullYear(),
                 today.getMonth(),
                 today.getDate(),
-                10,
-                15,
+                9,
+                30,
                 0,
                 0
               );
@@ -437,16 +482,19 @@ def main() -> int:
               let dayTriggered = false;
               let dayHit = null;
               let dayZoomed = false;
+              let dayAnchorBefore = NaN;
+              let dayAnchorAfter = NaN;
               if (body instanceof HTMLElement) {
                 stackRect = dayStackLayer.getBoundingClientRect();
+                const targetClientY = stackRect.top + stackRect.height * 0.45;
+                dayAnchorBefore = await scrollDayStackMinuteToClientY(
+                  todayKey,
+                  anchorMinutes,
+                  targetClientY
+                );
                 const bodyRect = body.getBoundingClientRect();
-                const visibleTop = Math.max(bodyRect.top, stackRect.top + 2);
-                const visibleBottom = Math.min(bodyRect.bottom, stackRect.bottom - 2);
                 const clientX = bodyRect.left + bodyRect.width * 0.5;
-                const clientY =
-                  visibleBottom > visibleTop
-                    ? (visibleTop + visibleBottom) * 0.5
-                    : stackRect.top + stackRect.height * 0.5;
+                const clientY = dayAnchorBefore;
                 const hit = document.elementFromPoint(clientX, clientY);
                 dayHit = hit ? { tag: hit.tagName, className: hit.className || "" } : null;
                 dispatchDblClick(
@@ -456,6 +504,7 @@ def main() -> int:
                 );
                 dayTriggered = true;
                 dayZoomed = await waitForMinutePx(ZOOM_MINUTE_PX);
+                dayAnchorAfter = dayStackMinuteClientY(todayKey, anchorMinutes);
               }
               const dayAfter = readLineState(
                 `#dayStackLayer .dayStackAlarmLine[data-title="${title}"]`
@@ -467,6 +516,11 @@ def main() -> int:
               setMinutePx(BASE_MINUTE_PX, null, wrapRect.top + wrapRect.height / 2);
               buildTimeline();
               await delay(80);
+              const todayFocusTargetY = wrapRect.top + wrapRect.height * 0.45;
+              const todayAnchorBefore = await scrollTodayFocusMinuteToClientY(
+                anchorMinutes,
+                todayFocusTargetY
+              );
               const todayBefore = readLineState(
                 `#timeline > .dayStackAlarmLine[data-title="${title}"]`
               );
@@ -474,9 +528,10 @@ def main() -> int:
               dispatchDblClick(
                 timelineWrap,
                 nextWrapRect.left + nextWrapRect.width * 0.5,
-                nextWrapRect.top + nextWrapRect.height * 0.5
+                todayAnchorBefore
               );
               const todayZoomed = await waitForMinutePx(ZOOM_MINUTE_PX);
+              const todayAnchorAfter = todayFocusMinuteClientY(anchorMinutes);
               const todayAfter = readLineState(
                 `#timeline > .dayStackAlarmLine[data-title="${title}"]`
               );
@@ -489,15 +544,36 @@ def main() -> int:
                   zoomed: dayZoomed,
                   before: dayBefore,
                   after: dayAfter,
+                  anchorBefore: dayAnchorBefore,
+                  anchorAfter: dayAnchorAfter,
+                  anchorDelta: Number.isFinite(dayAnchorBefore) && Number.isFinite(dayAnchorAfter)
+                    ? dayAnchorAfter - dayAnchorBefore
+                    : null,
+                  anchorKept: anchorKept(dayAnchorBefore, dayAnchorAfter),
                   heightGrew: heightGrew(dayBefore, dayAfter),
-                  ok: dayTriggered && dayZoomed && heightGrew(dayBefore, dayAfter) && isReadableCompact(dayAfter),
+                  ok:
+                    dayTriggered &&
+                    dayZoomed &&
+                    anchorKept(dayAnchorBefore, dayAnchorAfter) &&
+                    heightGrew(dayBefore, dayAfter) &&
+                    isReadableCompact(dayAfter),
                 },
                 todayFocus: {
                   zoomed: todayZoomed,
                   before: todayBefore,
                   after: todayAfter,
+                  anchorBefore: todayAnchorBefore,
+                  anchorAfter: todayAnchorAfter,
+                  anchorDelta: Number.isFinite(todayAnchorBefore) && Number.isFinite(todayAnchorAfter)
+                    ? todayAnchorAfter - todayAnchorBefore
+                    : null,
+                  anchorKept: anchorKept(todayAnchorBefore, todayAnchorAfter),
                   heightGrew: heightGrew(todayBefore, todayAfter),
-                  ok: todayZoomed && heightGrew(todayBefore, todayAfter) && isReadableCompact(todayAfter),
+                  ok:
+                    todayZoomed &&
+                    anchorKept(todayAnchorBefore, todayAnchorAfter) &&
+                    heightGrew(todayBefore, todayAfter) &&
+                    isReadableCompact(todayAfter),
                 },
                 minutePx,
                 expectedZoomHeight: ALARM_ZOOMED_HEIGHT_PX,
