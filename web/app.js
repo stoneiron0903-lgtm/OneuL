@@ -57,6 +57,9 @@ const OPACITY_JITTER_MAX = 0.8;
 const DRAG_START_THRESHOLD_PX = 3;
 const CONTEXT_BACK_REPEAT_SUPPRESS_MS = 360;
 const CONTEXT_BACK_REPEAT_SUPPRESS_PX = 24;
+const ZOOM_ANIMATION_RENDER_STEPS = 2;
+const ZOOM_IN_DURATION_MS = 55;
+const ZOOM_OUT_DURATION_MS = 65;
 const LONG_PRESS_SELECT_MS = 420;
 const WEATHER_REFRESH_MS = 10 * 60 * 1000;
 const WEATHER_GEO_TIMEOUT_MS = 3500;
@@ -903,17 +906,24 @@ function animateMinutePx(value, anchorDateTime, anchorClientY) {
   const targetIsZoomed = Math.abs(to - BASE_MINUTE_PX) >= MINUTE_PX_EPSILON;
   const keepZoomClassDuringAnim =
     Math.abs(from - BASE_MINUTE_PX) >= MINUTE_PX_EPSILON || targetIsZoomed;
-  const duration = zoomingIn ? 90 : 110;
+  const duration = zoomingIn ? ZOOM_IN_DURATION_MS : ZOOM_OUT_DURATION_MS;
   zoomAnimToken += 1;
   const token = zoomAnimToken;
+  let lastRenderStep = 0;
   timelineWrap.classList.toggle("zooming", keepZoomClassDuringAnim);
 
   const step = (now) => {
     if (token !== zoomAnimToken) return;
     const t = Math.min(1, (now - start) / duration);
-    const eased = t * t * (3 - 2 * t);
-    const next = from + (to - from) * eased;
-    setMinutePx(next, anchorDateTime, anchorClientY);
+    const renderStep =
+      t >= 1 ? ZOOM_ANIMATION_RENDER_STEPS : Math.floor(t * ZOOM_ANIMATION_RENDER_STEPS);
+    if (renderStep > lastRenderStep) {
+      lastRenderStep = renderStep;
+      const renderT = Math.min(1, renderStep / ZOOM_ANIMATION_RENDER_STEPS);
+      const eased = renderT * renderT * (3 - 2 * renderT);
+      const next = renderStep >= ZOOM_ANIMATION_RENDER_STEPS ? to : from + (to - from) * eased;
+      setMinutePx(next, anchorDateTime, anchorClientY);
+    }
     if (t < 1) {
       requestAnimationFrame(step);
     } else {
