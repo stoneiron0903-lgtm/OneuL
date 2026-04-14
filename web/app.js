@@ -668,6 +668,17 @@ function timelineRenderYForDateTime(dateTime) {
   return dayIndex * dayBlockHeight + timelineDayHeaderHeight() + minutes * minutePx;
 }
 
+function timelineRenderedYForTotalMinutes(totalMinutes) {
+  const safeTotal = Number.isFinite(totalMinutes) ? Math.max(0, totalMinutes) : 0;
+  const dayIndex = Math.floor(safeTotal / DAY_MINUTES);
+  const minuteOfDay = safeTotal - dayIndex * DAY_MINUTES;
+  const baseY = minuteOfDay * minutePx;
+  if (todayFocusMode) {
+    return todayFocusRenderedYForBaseY(baseY);
+  }
+  return dayIndex * dayBlockHeight + timelineDayHeaderHeight() + baseY;
+}
+
 function timelineDateTimeFromClientY(clientY, fallbackDateTime = null) {
   if (!timelineWrap || !timeline || !Number.isFinite(clientY)) {
     return fallbackDateTime instanceof Date && Number.isFinite(fallbackDateTime.getTime())
@@ -732,7 +743,7 @@ function scheduleZoomAnchorCorrection(
   anchorClientY,
   timelineAnchorTotalMinutes,
   stackAnchorKey = "",
-  stackAnchorBaseY = 0
+  stackAnchorTotalMinutes = NaN
 ) {
   if (zoomAnchorCorrectionRaf) {
     cancelAnimationFrame(zoomAnchorCorrectionRaf);
@@ -744,7 +755,9 @@ function scheduleZoomAnchorCorrection(
     ? timelineAnchorTotalMinutes
     : 0;
   const expectedStackAnchorKey = typeof stackAnchorKey === "string" ? stackAnchorKey : "";
-  const expectedStackAnchorBaseY = Number.isFinite(stackAnchorBaseY) ? stackAnchorBaseY : 0;
+  const expectedStackAnchorTotalMinutes = Number.isFinite(stackAnchorTotalMinutes)
+    ? stackAnchorTotalMinutes
+    : NaN;
   zoomAnchorCorrectionRaf = requestAnimationFrame(() => {
     zoomAnchorCorrectionRaf = 0;
     if (!timelineWrap || Math.abs(minutePx - expectedValue) >= MINUTE_PX_EPSILON) return;
@@ -755,13 +768,9 @@ function scheduleZoomAnchorCorrection(
       typeof expectedClientY === "number"
         ? expectedClientY - rect.top
         : timelineWrap.clientHeight / 2;
-    const dayIndex = Math.floor(expectedTimelineAnchorTotalMinutes / DAY_MINUTES);
-    const minuteOfDay = expectedTimelineAnchorTotalMinutes - dayIndex * DAY_MINUTES;
     const timelineTarget =
       timelineOffset +
-      dayIndex * dayBlockHeight +
-      timelineDayHeaderHeight() +
-      minuteOfDay * minutePx -
+      timelineRenderedYForTotalMinutes(expectedTimelineAnchorTotalMinutes) -
       timelineAnchorOffset;
     const timelineMaxScroll = Math.max(0, timelineWrap.scrollHeight - timelineWrap.clientHeight);
     timelineWrap.scrollTop = Math.max(0, Math.min(timelineMaxScroll, timelineTarget));
@@ -780,7 +789,10 @@ function scheduleZoomAnchorCorrection(
     const targetTop =
       scrollTopForDayStackItem(expandedItem) +
       DAY_BAR_HEIGHT +
-      dayStackRenderedYForItem(expectedStackAnchorBaseY, effectiveStackKey) -
+      dayStackRenderedYForItem(
+        Math.max(0, expectedStackAnchorTotalMinutes || 0) * minutePx,
+        effectiveStackKey
+      ) -
       stackAnchorOffset;
     setDayStackScrollTop(targetTop);
   });
@@ -820,14 +832,14 @@ function setMinutePx(value, anchorDateTime, anchorClientY) {
           dayStackLayer ? dayStackLayer.clientHeight / 2 : 0
         )
       : 0;
-  let stackAnchorBaseY = stackAnchorMinutes * minutePx;
+  let stackAnchorTotalMinutes = stackAnchorMinutes;
   if (stackWasOpen && dayStackLayer && stackAnchorKey) {
     const stackAnchorItem = dayStackLayer.querySelector(`.dayStackItem[data-date="${stackAnchorKey}"]`);
     if (stackAnchorItem) {
       const itemTop = scrollTopForDayStackItem(stackAnchorItem);
       const renderedY =
         stackScrollTop + stackAnchorOffset - itemTop - DAY_BAR_HEIGHT;
-      stackAnchorBaseY = dayStackBaseYForItem(renderedY, stackAnchorKey);
+      stackAnchorTotalMinutes = dayStackBaseYForItem(renderedY, stackAnchorKey) / minutePx;
     }
   }
   minutePx = value;
@@ -839,12 +851,7 @@ function setMinutePx(value, anchorDateTime, anchorClientY) {
   }
   recalcSizes();
   buildTimeline();
-  const dayIndex = Math.floor(timelineAnchorTotalMinutes / DAY_MINUTES);
-  const minutes = timelineAnchorTotalMinutes - dayIndex * DAY_MINUTES;
-  const y =
-    dayIndex * dayBlockHeight +
-    timelineDayHeaderHeight() +
-    minutes * minutePx;
+  const y = timelineRenderedYForTotalMinutes(timelineAnchorTotalMinutes);
   timelineWrap.scrollTop = Math.max(0, timelineOffset + y - anchorOffset);
   if (stackWasOpen && dayStackLayer) {
     renderDayStack({ preserveAnchorPosition: false });
@@ -853,7 +860,11 @@ function setMinutePx(value, anchorDateTime, anchorClientY) {
       const expandedItem = dayStackLayer.querySelector(`.dayStackItem[data-date="${anchorKey}"]`);
       if (expandedItem) {
         const yWithinItem =
-          DAY_BAR_HEIGHT + dayStackRenderedYForItem(stackAnchorBaseY, anchorKey);
+          DAY_BAR_HEIGHT +
+          dayStackRenderedYForItem(
+            Math.max(0, stackAnchorTotalMinutes || 0) * minutePx,
+            anchorKey
+          );
         setDayStackScrollTop(scrollTopForDayStackItem(expandedItem) + yWithinItem - stackAnchorOffset);
       } else {
         setDayStackScrollTop(stackScrollTop);
@@ -869,7 +880,7 @@ function setMinutePx(value, anchorDateTime, anchorClientY) {
     anchorClientY,
     timelineAnchorTotalMinutes,
     stackWasOpen ? stackAnchorKey : "",
-    stackWasOpen ? stackAnchorBaseY : 0
+    stackWasOpen ? stackAnchorTotalMinutes : NaN
   );
   persistRefreshViewState();
 }
