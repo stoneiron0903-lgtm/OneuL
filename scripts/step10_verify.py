@@ -384,6 +384,54 @@ def main() -> int:
             """,
             timeout=20.0,
         )
+        zoom_render_budget_state = session.evaluate(
+            """
+            (async () => {
+              await new Promise((resolve) => setTimeout(resolve, 430));
+              focusDateInDayStack(startOfDay(new Date()), { expand: true });
+              const anchorY = dayStackLayer.getBoundingClientRect().top + dayStackLayer.clientHeight / 2;
+              setMinutePx(BASE_MINUTE_PX, null, anchorY);
+              await new Promise((resolve) => setTimeout(resolve, 80));
+
+              const originalBuildTimeline = buildTimeline;
+              const originalRenderDayStack = renderDayStack;
+              let buildTimelineCount = 0;
+              let renderDayStackCount = 0;
+              buildTimeline = function (...args) {
+                buildTimelineCount += 1;
+                return originalBuildTimeline.apply(this, args);
+              };
+              renderDayStack = function (...args) {
+                renderDayStackCount += 1;
+                return originalRenderDayStack.apply(this, args);
+              };
+              const startedAt = performance.now();
+              try {
+                animateMinutePx(MAX_ZOOM_MINUTE_PX, new Date(), anchorY);
+                for (let attempt = 0; attempt < 40; attempt += 1) {
+                  if (Math.abs(minutePx - MAX_ZOOM_MINUTE_PX) < 0.01) break;
+                  await new Promise((resolve) => setTimeout(resolve, 25));
+                }
+              } finally {
+                buildTimeline = originalBuildTimeline;
+                renderDayStack = originalRenderDayStack;
+              }
+              const elapsedMs = performance.now() - startedAt;
+              return {
+                buildTimelineCount,
+                renderDayStackCount,
+                elapsedMs,
+                renderStepBudget: ZOOM_ANIMATION_RENDER_STEPS,
+                minutePx,
+                ok:
+                  Math.abs(minutePx - MAX_ZOOM_MINUTE_PX) < 0.01 &&
+                  buildTimelineCount <= ZOOM_ANIMATION_RENDER_STEPS &&
+                  renderDayStackCount <= ZOOM_ANIMATION_RENDER_STEPS,
+              };
+            })()
+            """,
+            timeout=20.0,
+        )
         session.screenshot(zoom_shot)
         results["proof_files"].append(zoom_shot.name)
         if (
@@ -393,6 +441,8 @@ def main() -> int:
             or not zoom_base_ok
             or not context_double_right_click_state
             or not context_double_right_click_state.get("ok")
+            or not zoom_render_budget_state
+            or not zoom_render_budget_state.get("ok")
         ):
             results["issues"].append("zoom_backflow_failed")
 
@@ -662,6 +712,7 @@ def main() -> int:
                 "half_ok": zoom_half_ok,
                 "base_ok": zoom_base_ok,
                 "double_right_click": context_double_right_click_state,
+                "render_budget": zoom_render_budget_state,
             },
             "dblclick_readable": dblclick_readable_state,
         }
