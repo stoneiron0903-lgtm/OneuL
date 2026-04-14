@@ -55,6 +55,8 @@ const OPACITY_IDLE_MS = 140;
 const OPACITY_JITTER_MIN = 0.5;
 const OPACITY_JITTER_MAX = 0.8;
 const DRAG_START_THRESHOLD_PX = 3;
+const CONTEXT_BACK_REPEAT_SUPPRESS_MS = 360;
+const CONTEXT_BACK_REPEAT_SUPPRESS_PX = 24;
 const LONG_PRESS_SELECT_MS = 420;
 const WEATHER_REFRESH_MS = 10 * 60 * 1000;
 const WEATHER_GEO_TIMEOUT_MS = 3500;
@@ -7331,13 +7333,42 @@ function installTodayFocusInlineInteractions() {
 }
 
 function installContextBack() {
+  let lastHandledAt = 0;
+  let lastHandledX = NaN;
+  let lastHandledY = NaN;
+
+  const isRepeatedContextBack = (clientX, clientY) => {
+    const now = performance.now();
+    const recent = now - lastHandledAt <= CONTEXT_BACK_REPEAT_SUPPRESS_MS;
+    const dx = Number.isFinite(clientX) && Number.isFinite(lastHandledX)
+      ? clientX - lastHandledX
+      : Number.POSITIVE_INFINITY;
+    const dy = Number.isFinite(clientY) && Number.isFinite(lastHandledY)
+      ? clientY - lastHandledY
+      : Number.POSITIVE_INFINITY;
+    return recent && Math.hypot(dx, dy) <= CONTEXT_BACK_REPEAT_SUPPRESS_PX;
+  };
+
+  const rememberHandledContextBack = (clientX, clientY) => {
+    lastHandledAt = performance.now();
+    lastHandledX = Number.isFinite(clientX) ? clientX : NaN;
+    lastHandledY = Number.isFinite(clientY) ? clientY : NaN;
+  };
+
   const onContextBack = (e) => {
+    const clientX = Number(e.clientX);
+    const clientY = Number(e.clientY);
+    if (isRepeatedContextBack(clientX, clientY)) {
+      e.preventDefault();
+      return;
+    }
     const handled = viewActionRuntime.handleContextBack({
       target: e.target,
-      clientX: e.clientX,
-      clientY: e.clientY,
+      clientX,
+      clientY,
     });
     if (!handled) return;
+    rememberHandledContextBack(clientX, clientY);
     e.preventDefault();
   };
   document.addEventListener("contextmenu", onContextBack);
