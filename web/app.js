@@ -2951,12 +2951,16 @@ function renderAlarms() {
 function renderDayStackAlarms() {
   {
     if (!dayStackLayer || !dayStackOpen) return;
-    dayStackLayer.querySelectorAll(".dayStackAlarmLine").forEach((line) => line.remove());
     const expandedItem = expandedDayStackItem();
     if (!expandedItem) return;
     const expandedKey = expandedItem.dataset.date || "";
     const body = ensureDayStackItemBodyBuilt(expandedItem);
     if (!body) return;
+    dayStackLayer.querySelectorAll(".dayStackAlarmLine").forEach((line) => {
+      if (line.parentElement !== body) {
+        line.remove();
+      }
+    });
     const isMaxZoom = minutePx >= MAX_ZOOM_MINUTE_PX - 0.02;
     const showCompactText = minutePx >= ZOOM_MINUTE_PX - MINUTE_PX_EPSILON;
     const isSlotOpen = showCompactText;
@@ -2969,104 +2973,11 @@ function renderDayStackAlarms() {
       dayStackAlarmBundleOpenKey = "";
     }
     const displayHeight = Math.max(2, dayStackAlarmDisplayHeight());
-    layoutItems.forEach((item) => {
-      const line = document.createElement("div");
-      line.className = "dayStackAlarmLine";
-      if (isSlotOpen) {
-        line.classList.add("slot-open");
-      }
-      const useColumns = isSlotOpen && item.colCount > 1;
-      if (useColumns) {
-        line.classList.add("columned");
-        line.style.setProperty("--alarm-col", String(item.col));
-        line.style.setProperty("--alarm-col-count", String(item.colCount));
-      }
-      line.style.top = `${item.top}px`;
-      const label = document.createElement("div");
-      label.className = "dayStackAlarmLine__label";
-
-      if (item.kind === "bundle") {
-        const bundleEntries = Array.isArray(item.bundleEntries) ? item.bundleEntries : [];
-        const bundleCount = bundleEntries.length;
-        const isBundleOpen = dayStackAlarmBundleOpenKey === item.bundleKey;
-        line.classList.add("bundle");
-        line.dataset.bundleKey = item.bundleKey;
-        line.dataset.bundleCount = String(bundleCount);
-        line.style.setProperty("--alarm-height", `${displayHeight}px`);
-        if (showCompactText) {
-          const countEl = document.createElement("div");
-          countEl.className = "dayStackAlarmBundleCount";
-          countEl.textContent = `+${bundleCount}`;
-          label.appendChild(countEl);
-        }
-
-        if (showCompactText && isBundleOpen) {
-          line.classList.add("bundle-open");
-          const list = document.createElement("div");
-          list.className = "dayStackAlarmBundleDetails";
-          const shownEntries = bundleEntries.slice(0, 6);
-          shownEntries.forEach((entry) => {
-            const row = document.createElement("div");
-            row.className = "dayStackAlarmBundleRow";
-            row.textContent = scheduleEntryCompactLabel(entry);
-            list.appendChild(row);
-          });
-          if (bundleEntries.length > shownEntries.length) {
-            const more = document.createElement("div");
-            more.className = "dayStackAlarmBundleMore";
-            more.textContent = `+${bundleEntries.length - shownEntries.length}`;
-            list.appendChild(more);
-          }
-          const rowCount =
-            shownEntries.length + (bundleEntries.length > shownEntries.length ? 1 : 0);
-          const detailHeight = Math.max(displayHeight, 20 + rowCount * 13);
-          line.style.setProperty("--alarm-height", `${detailHeight}px`);
-          label.appendChild(list);
-        }
-
-        line.appendChild(label);
-        body.appendChild(line);
-        return;
-      }
-
-      const { alarmTime, title, alarmIndex } = item.entry;
-      const entry = item.entry;
-      if (isMaxZoom) {
-        line.classList.add("expanded");
-      } else if (showCompactText) {
-        line.classList.add("compact");
-      }
-      line.dataset.source = entry.source;
-      if (entry.source === GOOGLE_EVENT_SOURCE) {
-        line.classList.add("google-event");
-        line.dataset.eventId = entry.eventId;
-        line.dataset.htmlLink = entry.htmlLink;
-        line.dataset.allDay = entry.allDay ? "true" : "false";
-      }
-      line.dataset.timestamp = String(alarmTime.getTime());
-      line.dataset.title = title;
-      if (entry.source === LOCAL_EVENT_SOURCE) {
-        line.dataset.alarmIndex = String(alarmIndex);
-      }
-      if (isMaxZoom) {
-        appendScheduleEntryLabel(
-          label,
-          entry,
-          "dayStackAlarmLine__time",
-          "dayStackAlarmLine__title"
-        );
-      } else if (showCompactText) {
-        appendScheduleEntryLabel(
-          label,
-          entry,
-          "dayStackAlarmLine__time",
-          "dayStackAlarmLine__title"
-        );
-      } else {
-        label.textContent = "";
-      }
-      line.appendChild(label);
-      body.appendChild(line);
+    renderReusableDayStackAlarmLines(body, layoutItems, {
+      isMaxZoom,
+      showCompactText,
+      isSlotOpen,
+      displayHeight,
     });
     return;
   }
