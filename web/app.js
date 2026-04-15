@@ -2242,9 +2242,61 @@ function sleepWindowTitleText(segment) {
   return fullRangeLabel ? `수면 ${fullRangeLabel}` : "수면";
 }
 
-function sleepWindowElementFromTarget(target) {
+const SLEEP_WINDOW_POINTER_BLOCKER_SELECTOR =
+  ".alarm-line, .dayStackAlarmLine, .dayStackInlineEditorSlot, .dayStackInlineEditorCard";
+
+function sleepWindowElementFromTarget(target, selector = ".sleep-window, .dayStackSleepWindow") {
   if (!target || !target.closest) return null;
-  return target.closest(".sleep-window, .dayStackSleepWindow");
+  return target.closest(selector);
+}
+
+function sleepWindowElementFromPoint(
+  clientX,
+  clientY,
+  selector = ".sleep-window, .dayStackSleepWindow"
+) {
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+    return null;
+  }
+  if (document.elementsFromPoint) {
+    const elements = document.elementsFromPoint(clientX, clientY);
+    for (const element of elements) {
+      if (
+        element &&
+        element.closest &&
+        element.closest(SLEEP_WINDOW_POINTER_BLOCKER_SELECTOR)
+      ) {
+        return null;
+      }
+      const sleepWindow = sleepWindowElementFromTarget(element, selector);
+      if (sleepWindow) return sleepWindow;
+    }
+  }
+  const candidates = document.querySelectorAll(selector);
+  for (const candidate of candidates) {
+    const rect = candidate.getBoundingClientRect();
+    if (
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom
+    ) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function sleepWindowElementFromPointer(
+  target,
+  clientX,
+  clientY,
+  selector = ".sleep-window, .dayStackSleepWindow"
+) {
+  return (
+    sleepWindowElementFromTarget(target, selector) ||
+    sleepWindowElementFromPoint(clientX, clientY, selector)
+  );
 }
 
 function openSleepWindowPreferenceEditor() {
@@ -6938,7 +6990,12 @@ function installDayStackLayerInteractions() {
       return;
     }
     if (isPointerOnVerticalScrollbar(dayStackLayer, e.clientX)) return;
-    const sleepWindow = sleepWindowElementFromTarget(e.target);
+    const sleepWindow = sleepWindowElementFromPointer(
+      e.target,
+      e.clientX,
+      e.clientY,
+      ".dayStackSleepWindow"
+    );
     hideHoverOverlay();
     stopInertia();
     pressed = true;
@@ -7002,6 +7059,12 @@ function installDayStackLayerInteractions() {
         return;
       }
       if (isPointerOnVerticalScrollbar(dayStackLayer, e.clientX)) {
+        hideHoverOverlay();
+        return;
+      }
+      if (
+        sleepWindowElementFromPointer(e.target, e.clientX, e.clientY, ".dayStackSleepWindow")
+      ) {
         hideHoverOverlay();
         return;
       }
@@ -8427,7 +8490,12 @@ function installDragScroll() {
     todayFocusSuppressNextInlineClick = false;
     longPressConsumed = false;
     clearTimer();
-    const sleepWindow = sleepWindowElementFromTarget(e.target);
+    const sleepWindow = sleepWindowElementFromPointer(
+      e.target,
+      e.clientX,
+      e.clientY,
+      ".sleep-window"
+    );
     if (sleepWindow) {
       pressTimer = setTimeout(() => {
         if (!pressed) return;
