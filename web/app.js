@@ -124,6 +124,8 @@ const googleEvents = [];
 const googleEventsById = new Map();
 let zoomAnimToken = 0;
 let zoomAnchorCorrectionRaf = 0;
+let timelineRebuildDeferred = false;
+let deferredTimelineScrollTop = NaN;
 let selectionLineAnimated = false;
 let pointerActive = false;
 let modalOverlay = null;
@@ -855,11 +857,20 @@ function setMinutePx(value, anchorDateTime, anchorClientY) {
     );
   }
   recalcSizes();
-  buildTimeline();
   const y = timelineRenderedYForTotalMinutes(timelineAnchorTotalMinutes);
-  timelineWrap.scrollTop = Math.max(0, timelineOffset + y - anchorOffset);
+  const nextTimelineScrollTop = Math.max(0, timelineOffset + y - anchorOffset);
+  if (stackWasOpen) {
+    timelineRebuildDeferred = true;
+    deferredTimelineScrollTop = nextTimelineScrollTop;
+  } else {
+    buildTimeline();
+    timelineWrap.scrollTop = nextTimelineScrollTop;
+  }
   if (stackWasOpen && dayStackLayer) {
-    renderDayStack({ preserveAnchorPosition: false });
+    const refreshedStackLayout = refreshDayStackZoomLayout();
+    if (!refreshedStackLayout) {
+      renderDayStack({ preserveAnchorPosition: false });
+    }
     if (stackExpandedDate) {
       const anchorKey = stackAnchorKey;
       const expandedItem = dayStackLayer.querySelector(`.dayStackItem[data-date="${anchorKey}"]`);
@@ -3286,6 +3297,8 @@ function enterTodayFocusMode(targetDate = null) {
 
 
 function buildTimeline() {
+  timelineRebuildDeferred = false;
+  deferredTimelineScrollTop = NaN;
   timeline.style.height = `${
     todayFocusMode ? todayFocusTimelineHeight() : timelineVisibleDayCount() * dayBlockHeight
   }px`;
@@ -3295,6 +3308,16 @@ function buildTimeline() {
   buildHourLines();
   buildDayBars();
   updateTodayFocusRail();
+}
+
+function flushDeferredTimelineRebuild() {
+  if (!timelineRebuildDeferred) return;
+  const targetScrollTop = deferredTimelineScrollTop;
+  buildTimeline();
+  if (timelineWrap && timeline && Number.isFinite(targetScrollTop)) {
+    const maxScroll = Math.max(0, timeline.scrollHeight - timelineWrap.clientHeight);
+    timelineWrap.scrollTop = Math.max(0, Math.min(maxScroll, targetScrollTop));
+  }
 }
 
 function ensureHoverGuideElement() {
@@ -6120,6 +6143,22 @@ function renderDayStack(options = {}) {
   requestGoogleCalendarSync(false);
 }
 
+function refreshDayStackZoomLayout() {
+  if (!dayStackLayer || !dayStackOpen) return false;
+  if (
+    dayStackViewMode !== DAY_STACK_VIEW_MODE_MONTH_DAY ||
+    dayStackMonthListMode ||
+    dayStackYearListMode
+  ) {
+    return false;
+  }
+  applyDayStackBodyOpenRatios(undefined, false);
+  updateDayStackMonthRailLabelPositions();
+  updateDayStackNowLines(new Date());
+  renderDayStackAlarms();
+  return true;
+}
+
 function setDayStackOpen(nextOpen) {
   dayStackOpen = Boolean(nextOpen);
   if (!dayStackLayer) return;
@@ -6167,6 +6206,7 @@ function setDayStackOpen(nextOpen) {
     dayStackLayer.classList.remove("real-head-sticky");
     dayStackLayer.classList.remove("year-list-mode");
     resetDayStackMonthModeClasses();
+    flushDeferredTimelineRebuild();
     updateStickyDay();
     return;
   }
