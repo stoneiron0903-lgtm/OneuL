@@ -508,6 +508,105 @@ def main() -> int:
             """,
             timeout=20.0,
         )
+        alarm_node_reuse_state = session.evaluate(
+            """
+            (async () => {
+              const title = "Step10 Node Reuse";
+              const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+              const removeTestAlarms = () => {
+                for (let index = alarms.length - 1; index >= 0; index -= 1) {
+                  const alarm = alarms[index];
+                  if (alarm && !(alarm instanceof Date) && alarm.title === title) {
+                    alarms.splice(index, 1);
+                  }
+                }
+              };
+              const waitForMinutePx = async (target) => {
+                for (let attempt = 0; attempt < 40; attempt += 1) {
+                  if (Math.abs(minutePx - target) < 0.01) return true;
+                  await delay(25);
+                }
+                return Math.abs(minutePx - target) < 0.01;
+              };
+
+              removeTestAlarms();
+              const today = startOfDay(new Date());
+              const alarmTime = new Date(
+                today.getFullYear(),
+                today.getMonth(),
+                today.getDate(),
+                9,
+                45,
+                0,
+                0
+              );
+              alarms.push({ time: alarmTime, title });
+
+              focusDateInDayStack(today, { expand: true });
+              let stackRect = dayStackLayer.getBoundingClientRect();
+              setMinutePx(BASE_MINUTE_PX, null, stackRect.top + stackRect.height / 2);
+              renderDayStackAlarms();
+              await delay(80);
+              const dayBefore = document.querySelector(
+                `#dayStackLayer .dayStackAlarmLine[data-title="${title}"]`
+              );
+              animateMinutePx(ZOOM_MINUTE_PX, alarmTime, stackRect.top + stackRect.height / 2);
+              const dayZoomed = await waitForMinutePx(ZOOM_MINUTE_PX);
+              const dayAfter = document.querySelector(
+                `#dayStackLayer .dayStackAlarmLine[data-title="${title}"]`
+              );
+
+              setDayStackOpen(false);
+              setTodayFocusMode(true);
+              const wrapRect = timelineWrap.getBoundingClientRect();
+              setMinutePx(BASE_MINUTE_PX, null, wrapRect.top + wrapRect.height / 2);
+              buildTimeline();
+              renderAlarms();
+              await delay(80);
+              const todayBefore = document.querySelector(
+                `#timeline > .dayStackAlarmLine[data-title="${title}"]`
+              );
+              animateMinutePx(ZOOM_MINUTE_PX, alarmTime, wrapRect.top + wrapRect.height / 2);
+              const todayZoomed = await waitForMinutePx(ZOOM_MINUTE_PX);
+              const todayAfter = document.querySelector(
+                `#timeline > .dayStackAlarmLine[data-title="${title}"]`
+              );
+
+              const state = {
+                day: {
+                  zoomed: dayZoomed,
+                  beforeKey: dayBefore ? dayBefore.dataset.reuseKey || "" : "",
+                  afterKey: dayAfter ? dayAfter.dataset.reuseKey || "" : "",
+                  sameNode: Boolean(dayBefore && dayAfter && dayBefore === dayAfter),
+                  compact: Boolean(dayAfter && dayAfter.classList.contains("compact")),
+                  text: dayAfter ? (dayAfter.textContent || "").trim() : "",
+                },
+                todayFocus: {
+                  zoomed: todayZoomed,
+                  beforeKey: todayBefore ? todayBefore.dataset.reuseKey || "" : "",
+                  afterKey: todayAfter ? todayAfter.dataset.reuseKey || "" : "",
+                  sameNode: Boolean(todayBefore && todayAfter && todayBefore === todayAfter),
+                  compact: Boolean(todayAfter && todayAfter.classList.contains("compact")),
+                  text: todayAfter ? (todayAfter.textContent || "").trim() : "",
+                },
+              };
+              state.ok = Boolean(
+                state.day.zoomed &&
+                state.day.sameNode &&
+                state.day.compact &&
+                state.day.text.includes(title) &&
+                state.todayFocus.zoomed &&
+                state.todayFocus.sameNode &&
+                state.todayFocus.compact &&
+                state.todayFocus.text.includes(title)
+              );
+              removeTestAlarms();
+              renderAlarms();
+              return state;
+            })()
+            """,
+            timeout=20.0,
+        )
         session.screenshot(zoom_shot)
         results["proof_files"].append(zoom_shot.name)
         if (
@@ -521,6 +620,8 @@ def main() -> int:
             or not zoom_render_budget_state.get("ok")
             or not today_focus_render_budget_state
             or not today_focus_render_budget_state.get("ok")
+            or not alarm_node_reuse_state
+            or not alarm_node_reuse_state.get("ok")
         ):
             results["issues"].append("zoom_backflow_failed")
 
@@ -816,6 +917,7 @@ def main() -> int:
                 "double_right_click": context_double_right_click_state,
                 "render_budget": zoom_render_budget_state,
                 "today_focus_render_budget": today_focus_render_budget_state,
+                "alarm_node_reuse": alarm_node_reuse_state,
             },
             "dblclick_readable": dblclick_readable_state,
         }
