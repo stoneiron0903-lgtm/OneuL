@@ -2116,8 +2116,9 @@ body {
   left: var(--left-pad);
   right: 12px;
   overflow: hidden;
-  pointer-events: none;
+  pointer-events: auto;
   z-index: 1;
+  cursor: pointer;
   background: linear-gradient(180deg, rgba(160, 124, 76, 0.18) 0%, rgba(160, 124, 76, 0.1) 100%);
   border-top: 1px solid rgba(212, 175, 123, 0.2);
   border-bottom: 1px solid rgba(212, 175, 123, 0.12);
@@ -3083,8 +3084,9 @@ body {
   left: var(--left-pad);
   right: 12px;
   overflow: hidden;
-  pointer-events: none;
+  pointer-events: auto;
   z-index: 1;
+  cursor: pointer;
   background: linear-gradient(180deg, rgba(160, 124, 76, 0.16) 0%, rgba(160, 124, 76, 0.08) 100%);
   border-top: 1px solid rgba(212, 175, 123, 0.18);
   border-bottom: 1px solid rgba(212, 175, 123, 0.12);

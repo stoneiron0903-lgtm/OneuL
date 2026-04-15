@@ -2242,6 +2242,17 @@ function sleepWindowTitleText(segment) {
   return fullRangeLabel ? `수면 ${fullRangeLabel}` : "수면";
 }
 
+function sleepWindowElementFromTarget(target) {
+  if (!target || !target.closest) return null;
+  return target.closest(".sleep-window, .dayStackSleepWindow");
+}
+
+function openSleepWindowPreferenceEditor() {
+  hideHoverGuide();
+  clearDayStackInlineDraft();
+  openWakeTimePreferencePrompt({ source: "manual" });
+}
+
 function renderTimelineSleepWindows() {
   if (!timeline) return;
   timeline.querySelectorAll(".sleep-window").forEach((node) => node.remove());
@@ -2269,7 +2280,8 @@ function renderTimelineSleepWindows() {
       if (height <= 1) return;
       const windowEl = document.createElement("div");
       windowEl.className = "sleep-window";
-      windowEl.setAttribute("aria-hidden", "true");
+      windowEl.setAttribute("role", "button");
+      windowEl.setAttribute("aria-label", "\uC218\uBA74 \uC2DC\uAC04 \uC124\uC815");
       if (height < 28) {
         windowEl.classList.add("is-compact");
       }
@@ -2312,7 +2324,8 @@ function renderDayStackSleepWindows(body, itemDateKey = "") {
     if (height <= 1) return;
     const windowEl = document.createElement("div");
     windowEl.className = "dayStackSleepWindow";
-    windowEl.setAttribute("aria-hidden", "true");
+    windowEl.setAttribute("role", "button");
+    windowEl.setAttribute("aria-label", "\uC218\uBA74 \uC2DC\uAC04 \uC124\uC815");
     if (height < 28) {
       windowEl.classList.add("is-compact");
     }
@@ -6925,6 +6938,7 @@ function installDayStackLayerInteractions() {
       return;
     }
     if (isPointerOnVerticalScrollbar(dayStackLayer, e.clientX)) return;
+    const sleepWindow = sleepWindowElementFromTarget(e.target);
     hideHoverOverlay();
     stopInertia();
     pressed = true;
@@ -6940,6 +6954,19 @@ function installDayStackLayerInteractions() {
     lastTime = performance.now();
     velocity = 0;
     clearSelectionState();
+    if (sleepWindow) {
+      pressTimer = setTimeout(() => {
+        pressTimer = null;
+        if (!pressed || dragging || longPressConsumed) return;
+        openSleepWindowPreferenceEditor();
+        suppressClick = true;
+        longPressConsumed = true;
+      }, DAY_STACK_INLINE_EDITOR_LONG_PRESS_MS);
+      dayStackLayer.setPointerCapture(e.pointerId);
+      e.stopPropagation();
+      e.preventDefault();
+      return;
+    }
     const pressBody = e.target && e.target.closest ? e.target.closest(".dayStackBody") : null;
     const pressItem = pressBody ? pressBody.closest(".dayStackItem.expanded") : null;
     if (pressBody && pressItem && dayStackLayer.contains(pressItem)) {
@@ -8400,6 +8427,21 @@ function installDragScroll() {
     todayFocusSuppressNextInlineClick = false;
     longPressConsumed = false;
     clearTimer();
+    const sleepWindow = sleepWindowElementFromTarget(e.target);
+    if (sleepWindow) {
+      pressTimer = setTimeout(() => {
+        if (!pressed) return;
+        const drift = Math.hypot(pointerX - pressX, pointerY - pressY);
+        if (drift > DRAG_START_THRESHOLD_PX) return;
+        openSleepWindowPreferenceEditor();
+        hideSelectionElements();
+        longPressConsumed = true;
+        dragging = false;
+        selecting = false;
+      }, DAY_STACK_INLINE_EDITOR_LONG_PRESS_MS);
+      timelineWrap.setPointerCapture(e.pointerId);
+      return;
+    }
     pressTimer = setTimeout(() => {
       if (!pressed) return;
       const drift = Math.hypot(pointerX - pressX, pointerY - pressY);
