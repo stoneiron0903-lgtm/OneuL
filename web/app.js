@@ -890,11 +890,52 @@ function setMinutePx(value, anchorDateTime, anchorClientY) {
   persistRefreshViewState();
 }
 
+function clearZoomPreview() {
+  if (!timelineWrap) return;
+  timelineWrap.classList.remove("zoom-preview");
+  timelineWrap.style.removeProperty("--zoom-preview-scale");
+  timelineWrap.style.removeProperty("--zoom-preview-origin-y");
+  timelineWrap.style.removeProperty("--zoom-preview-duration");
+}
+
+function zoomPreviewOriginY(anchorClientY) {
+  if (!Number.isFinite(anchorClientY)) return 0;
+  if (dayStackOpen && dayStackLayer) {
+    const expandedItem = expandedDayStackItem();
+    const body = expandedItem ? expandedItem.querySelector(".dayStackBody") : null;
+    if (body) {
+      return Math.max(0, anchorClientY - body.getBoundingClientRect().top);
+    }
+    const layerRect = dayStackLayer.getBoundingClientRect();
+    return Math.max(0, anchorClientY - layerRect.top);
+  }
+  if (!timelineWrap || !timeline) return 0;
+  const rect = timelineWrap.getBoundingClientRect();
+  return Math.max(0, anchorClientY - rect.top + timelineWrap.scrollTop - timeline.offsetTop);
+}
+
+function applyZoomPreview(from, to, anchorClientY, duration) {
+  if (!timelineWrap || !Number.isFinite(from) || !Number.isFinite(to) || from <= 0 || to <= 0) {
+    return false;
+  }
+  const scale = Math.max(0.25, Math.min(4, to / from));
+  if (!Number.isFinite(scale) || Math.abs(scale - 1) < 0.001) return false;
+  timelineWrap.style.setProperty("--zoom-preview-scale", scale.toFixed(4));
+  timelineWrap.style.setProperty(
+    "--zoom-preview-origin-y",
+    `${zoomPreviewOriginY(anchorClientY).toFixed(2)}px`
+  );
+  timelineWrap.style.setProperty("--zoom-preview-duration", `${Math.max(0, duration).toFixed(0)}ms`);
+  timelineWrap.classList.add("zoom-preview");
+  return true;
+}
+
 function animateMinutePx(value, anchorDateTime, anchorClientY) {
   if (Math.abs(minutePx - value) < MINUTE_PX_EPSILON) return;
   if (dayStackOpen) {
     clearDayStackCenterTimer();
   }
+  clearZoomPreview();
   const from = minutePx;
   const to = value;
   if (Math.abs(from - to) < MINUTE_PX_EPSILON) {
@@ -911,6 +952,7 @@ function animateMinutePx(value, anchorDateTime, anchorClientY) {
   const token = zoomAnimToken;
   let lastRenderStep = 0;
   timelineWrap.classList.toggle("zooming", keepZoomClassDuringAnim);
+  applyZoomPreview(from, to, anchorClientY, duration);
 
   const step = (now) => {
     if (token !== zoomAnimToken) return;
@@ -922,11 +964,13 @@ function animateMinutePx(value, anchorDateTime, anchorClientY) {
       const renderT = Math.min(1, renderStep / ZOOM_ANIMATION_RENDER_STEPS);
       const eased = renderT * renderT * (3 - 2 * renderT);
       const next = renderStep >= ZOOM_ANIMATION_RENDER_STEPS ? to : from + (to - from) * eased;
+      clearZoomPreview();
       setMinutePx(next, anchorDateTime, anchorClientY);
     }
     if (t < 1) {
       requestAnimationFrame(step);
     } else {
+      clearZoomPreview();
       timelineWrap.classList.toggle("zooming", targetIsZoomed);
     }
   };

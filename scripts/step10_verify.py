@@ -492,6 +492,23 @@ def main() -> int:
                   })
                 );
               };
+              const readZoomPreview = () => {
+                const style = getComputedStyle(timelineWrap);
+                const scale = Number(style.getPropertyValue("--zoom-preview-scale"));
+                const origin = style.getPropertyValue("--zoom-preview-origin-y");
+                return {
+                  active: timelineWrap.classList.contains("zoom-preview"),
+                  scale,
+                  origin,
+                };
+              };
+              const previewOk = (state) => Boolean(
+                state &&
+                state.active &&
+                Number.isFinite(state.scale) &&
+                Math.abs(state.scale - 1) >= 0.01 &&
+                String(state.origin || "").trim().endsWith("px")
+              );
               const dayStackMinuteClientY = (itemDateKey, minutes) => {
                 const item = dayStackLayer.querySelector(`.dayStackItem[data-date="${itemDateKey}"]`);
                 const body = item ? item.querySelector(".dayStackBody") : null;
@@ -584,6 +601,7 @@ def main() -> int:
               let dayZoomed = false;
               let dayAnchorBefore = NaN;
               let dayAnchorAfter = NaN;
+              let dayPreview = null;
               if (body instanceof HTMLElement) {
                 stackRect = dayStackLayer.getBoundingClientRect();
                 const targetClientY = stackRect.top + stackRect.height * 0.45;
@@ -602,6 +620,7 @@ def main() -> int:
                   clientX,
                   clientY
                 );
+                dayPreview = readZoomPreview();
                 dayTriggered = true;
                 dayZoomed = await waitForMinutePx(ZOOM_MINUTE_PX);
                 dayAnchorAfter = dayStackMinuteClientY(todayKey, anchorMinutes);
@@ -630,6 +649,7 @@ def main() -> int:
                 nextWrapRect.left + nextWrapRect.width * 0.5,
                 todayAnchorBefore
               );
+              const todayPreview = readZoomPreview();
               const todayZoomed = await waitForMinutePx(ZOOM_MINUTE_PX);
               const todayAnchorAfter = todayFocusMinuteClientY(anchorMinutes);
               const todayAfter = readLineState(
@@ -642,6 +662,7 @@ def main() -> int:
                   triggered: dayTriggered,
                   hit: dayHit,
                   zoomed: dayZoomed,
+                  preview: dayPreview,
                   before: dayBefore,
                   after: dayAfter,
                   anchorBefore: dayAnchorBefore,
@@ -653,6 +674,7 @@ def main() -> int:
                   heightGrew: heightGrew(dayBefore, dayAfter),
                   ok:
                     dayTriggered &&
+                    previewOk(dayPreview) &&
                     dayZoomed &&
                     anchorKept(dayAnchorBefore, dayAnchorAfter) &&
                     heightGrew(dayBefore, dayAfter) &&
@@ -660,6 +682,7 @@ def main() -> int:
                 },
                 todayFocus: {
                   zoomed: todayZoomed,
+                  preview: todayPreview,
                   before: todayBefore,
                   after: todayAfter,
                   anchorBefore: todayAnchorBefore,
@@ -671,6 +694,7 @@ def main() -> int:
                   heightGrew: heightGrew(todayBefore, todayAfter),
                   ok:
                     todayZoomed &&
+                    previewOk(todayPreview) &&
                     anchorKept(todayAnchorBefore, todayAnchorAfter) &&
                     heightGrew(todayBefore, todayAfter) &&
                     isReadableCompact(todayAfter),

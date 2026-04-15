@@ -2044,8 +2044,14 @@ body {
   border-bottom: 1px solid #1e1e1e;
   transform: translateY(
     calc((1 - var(--day-open-ratio)) * (var(--stack-day-body-height) + var(--day-body-extra-height)) * 0.5)
-  );
+  ) scaleY(var(--zoom-preview-scale, 1));
+  transform-origin: 0 var(--zoom-preview-origin-y, 0px);
   transition: height 180ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+#timelineWrap.zoom-preview .dayStackItem.expanded .dayStackBody:not(.agenda-only-mode) {
+  transition: transform var(--zoom-preview-duration, 35ms) cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
 }
 
 #dayStackLayer.window-shifting .dayStackBody {
@@ -2960,6 +2966,13 @@ body {
 #timeline {
   position: relative;
   min-height: 100%;
+  transform: scaleY(var(--zoom-preview-scale, 1));
+  transform-origin: 0 var(--zoom-preview-origin-y, 0px);
+}
+
+#timelineWrap.zoom-preview #timeline {
+  transition: transform var(--zoom-preview-duration, 35ms) cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
 }
 
 .hour-line {
