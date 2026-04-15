@@ -476,12 +476,196 @@ def open_day_stack(session: CdpSession) -> bool:
         })()
         """
     )
-    return wait_until(
+    opened = wait_until(
         session,
         '(() => document.getElementById("dayStackLayer")?.classList.contains("open") || false)()',
         timeout=5.0,
         interval=0.1,
     )
+    if opened:
+        time.sleep(0.6)
+    return opened
+
+
+def close_modal(session: CdpSession) -> None:
+    session.evaluate(
+        """
+        (() => {
+          if (typeof hideModal === "function") {
+            hideModal();
+          }
+          return true;
+        })()
+        """
+    )
+
+
+def dispatch_mouse_long_press(session: CdpSession, x: float, y: float, hold: float = 0.45) -> None:
+    session.call_session("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": x, "y": y}, timeout=15.0)
+    session.call_session(
+        "Input.dispatchMouseEvent",
+        {
+            "type": "mousePressed",
+            "x": x,
+            "y": y,
+            "button": "left",
+            "buttons": 1,
+            "clickCount": 1,
+        },
+        timeout=15.0,
+    )
+    time.sleep(hold)
+    session.call_session(
+        "Input.dispatchMouseEvent",
+        {
+            "type": "mouseReleased",
+            "x": x,
+            "y": y,
+            "button": "left",
+            "buttons": 0,
+            "clickCount": 1,
+        },
+        timeout=15.0,
+    )
+
+
+def ensure_sleep_window_preferences(session: CdpSession) -> dict:
+    return session.evaluate(
+        """
+        (() => {
+          try {
+            localStorage.setItem("oneul:wake-time", "07:00");
+            localStorage.setItem("oneul:sleep-duration-minutes", "480");
+            localStorage.setItem("oneul:wake-setup-prompted", "1");
+          } catch (_) {}
+          if (typeof userWakeTimePreference !== "undefined") {
+            userWakeTimePreference = "07:00";
+          }
+          if (typeof userSleepDurationMinutes !== "undefined") {
+            userSleepDurationMinutes = 480;
+          }
+          if (typeof updateWakeTimeButton === "function") {
+            updateWakeTimeButton();
+          }
+          if (typeof refreshSleepWindowDisplays === "function") {
+            refreshSleepWindowDisplays();
+          }
+          if (typeof hideModal === "function") {
+            hideModal();
+          }
+          return {
+            timelineCount: document.querySelectorAll(".sleep-window").length,
+            dayStackCount: document.querySelectorAll(".dayStackSleepWindow").length,
+            wakeText: document.getElementById("statusWakeTimeBtn")?.textContent || ""
+          };
+        })()
+        """
+    )
+
+
+def sleep_window_pointer_target(session: CdpSession, selector: str) -> dict:
+    escaped_selector = js_string(selector)
+    return session.evaluate(
+        f"""
+        ((selector) => {{
+          const nodes = Array.from(document.querySelectorAll(selector));
+          const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+          const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+          const visibleInfo = (node) => {{
+            const rect = node.getBoundingClientRect();
+            const visibleTop = Math.max(0, rect.top);
+            const visibleBottom = Math.min(viewportHeight, rect.bottom);
+            const visibleLeft = Math.max(0, rect.left);
+            const visibleRight = Math.min(viewportWidth, rect.right);
+            return {{
+              node,
+              rect,
+              visibleTop,
+              visibleBottom,
+              visibleLeft,
+              visibleRight,
+              visibleHeight: Math.max(0, visibleBottom - visibleTop),
+              visibleWidth: Math.max(0, visibleRight - visibleLeft)
+            }};
+          }};
+          let info = nodes.map(visibleInfo).find((item) => item.visibleHeight > 8 && item.visibleWidth > 8);
+          let scrolled = false;
+          if (!info && nodes.length) {{
+            nodes[0].scrollIntoView({{ block: "center", inline: "nearest" }});
+            scrolled = true;
+            info = visibleInfo(nodes[0]);
+          }}
+          const node = info ? info.node : null;
+          if (!node) return {{ exists: false }};
+          const rect = info.rect;
+          const x = info.visibleLeft + info.visibleWidth / 2;
+          const y = info.visibleTop + info.visibleHeight / 2;
+          const topNode = document.elementFromPoint(x, y);
+          const hitSleepWindow = Boolean(topNode && topNode.closest && topNode.closest(selector));
+          return {{
+            exists: true,
+            x,
+            y,
+            hitSleepWindow,
+            scrolled,
+            visibleWidth: info.visibleWidth,
+            visibleHeight: info.visibleHeight,
+            width: rect.width,
+            height: rect.height,
+            topClassName: topNode ? String(topNode.className || "") : ""
+          }};
+        }})({escaped_selector})
+        """
+    )
+
+
+def stable_sleep_window_pointer_target(session: CdpSession, selector: str) -> dict:
+    target = sleep_window_pointer_target(session, selector)
+    for _ in range(3):
+        time.sleep(0.3)
+        next_target = sleep_window_pointer_target(session, selector)
+        if target.get("exists") and next_target.get("exists"):
+            same_x = abs(float(target.get("x", 0)) - float(next_target.get("x", 0))) <= 1
+            same_y = abs(float(target.get("y", 0)) - float(next_target.get("y", 0))) <= 1
+            if same_x and same_y and not next_target.get("scrolled"):
+                return next_target
+        target = next_target
+    return target
+
+
+def verify_sleep_window_long_press(session: CdpSession, selector: str, screenshot_path: Path) -> dict:
+    close_modal(session)
+    prefs = ensure_sleep_window_preferences(session)
+    target = stable_sleep_window_pointer_target(session, selector)
+    if target.get("scrolled"):
+        time.sleep(0.3)
+        target = stable_sleep_window_pointer_target(session, selector)
+    if not target.get("exists") or not target.get("hitSleepWindow"):
+        return {"ok": False, "prefs": prefs, "target": target}
+
+    time.sleep(0.2)
+    try:
+        dispatch_mouse_long_press(session, float(target["x"]), float(target["y"]))
+    except RuntimeError as exc:
+        close_modal(session)
+        return {"ok": False, "prefs": prefs, "target": target, "error": str(exc)}
+    opened = wait_until(
+        session,
+        """
+        (() => {
+          const overlay = document.querySelector(".modal-overlay.open");
+          const title = overlay?.querySelector(".modal-title")?.textContent || "";
+          const input = overlay?.querySelector(".modal-input");
+          return Boolean(input && title.includes("기상 시간"));
+        })()
+        """,
+        timeout=5.0,
+        interval=0.1,
+    )
+    if opened:
+        session.screenshot(screenshot_path)
+    close_modal(session)
+    return {"ok": bool(opened), "prefs": prefs, "target": target}
 
 
 def verify_step7(session: CdpSession, original_alarm_items: list[dict]) -> dict:
@@ -498,6 +682,8 @@ def verify_step7(session: CdpSession, original_alarm_items: list[dict]) -> dict:
         "month_toggle": proof_path("verify-step7-month-toggle.png"),
         "context_back": proof_path("verify-step7-context-back.png"),
         "alarm_roundtrip": proof_path("verify-step7-alarm-roundtrip.png"),
+        "sleep_long_press_timeline": proof_path("verify-step7-sleep-long-press-timeline.png"),
+        "sleep_long_press_day_stack": proof_path("verify-step7-sleep-long-press-day-stack.png"),
     }
 
     wake_ok = maybe_complete_wake_setup(session)
@@ -540,6 +726,16 @@ def verify_step7(session: CdpSession, original_alarm_items: list[dict]) -> dict:
         results["issues"].append("today_focus_enter_failed")
     session.screenshot(screenshots["today_focus"])
     results["proof_files"].append(screenshots["today_focus"].name)
+
+    sleep_timeline_result = verify_sleep_window_long_press(
+        session,
+        ".sleep-window",
+        screenshots["sleep_long_press_timeline"],
+    )
+    if sleep_timeline_result.get("ok"):
+        results["proof_files"].append(screenshots["sleep_long_press_timeline"].name)
+    else:
+        results["issues"].append("sleep_window_long_press_timeline_failed")
 
     session.call_session("Page.reload", {"ignoreCache": True}, timeout=20.0)
     if not wait_until(
@@ -614,6 +810,16 @@ def verify_step7(session: CdpSession, original_alarm_items: list[dict]) -> dict:
         results["issues"].append("day_stack_open_failed")
     session.screenshot(screenshots["day_stack"])
     results["proof_files"].append(screenshots["day_stack"].name)
+
+    sleep_day_stack_result = verify_sleep_window_long_press(
+        session,
+        ".dayStackSleepWindow",
+        screenshots["sleep_long_press_day_stack"],
+    )
+    if sleep_day_stack_result.get("ok"):
+        results["proof_files"].append(screenshots["sleep_long_press_day_stack"].name)
+    else:
+        results["issues"].append("sleep_window_long_press_day_stack_failed")
 
     month_toggle_ok = session.evaluate(
         """
@@ -753,6 +959,8 @@ def verify_step7(session: CdpSession, original_alarm_items: list[dict]) -> dict:
         "home": home_summary,
         "refresh_persistence_ok": refresh_persist_ok,
         "wake_setup_ok": wake_ok,
+        "sleep_long_press_timeline": sleep_timeline_result,
+        "sleep_long_press_day_stack": sleep_day_stack_result,
         "alarm_count_before": len(original_alarm_items),
         "alarm_count_after_restore": len(load_alarm_items()),
     }
