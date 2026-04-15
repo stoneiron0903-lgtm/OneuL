@@ -2058,6 +2058,10 @@ body {
   transition: none;
 }
 
+#dayStackLayer.zoom-layout-refresh .dayStackBody {
+  transition: none;
+}
+
 .dayStackItem.expanded .dayStackBody {
   height: calc(var(--stack-day-body-height) + var(--day-body-extra-height));
 }

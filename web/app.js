@@ -863,7 +863,10 @@ function setMinutePx(value, anchorDateTime, anchorClientY) {
     timelineRebuildDeferred = true;
     deferredTimelineScrollTop = nextTimelineScrollTop;
   } else {
-    buildTimeline();
+    const refreshedTimelineLayout = refreshTimelineZoomLayout();
+    if (!refreshedTimelineLayout) {
+      buildTimeline();
+    }
     timelineWrap.scrollTop = nextTimelineScrollTop;
   }
   if (stackWasOpen && dayStackLayer) {
@@ -3318,6 +3321,18 @@ function flushDeferredTimelineRebuild() {
     const maxScroll = Math.max(0, timeline.scrollHeight - timelineWrap.clientHeight);
     timelineWrap.scrollTop = Math.max(0, Math.min(maxScroll, targetScrollTop));
   }
+}
+
+function refreshTimelineZoomLayout() {
+  if (!timeline || !timelineWrap || dayStackOpen || !todayFocusMode) return false;
+  timeline.style.height = `${todayFocusTimelineHeight()}px`;
+  timeline
+    .querySelectorAll(".hour-label, .hour-line, .half-line, .day-bar")
+    .forEach((node) => node.remove());
+  buildHourLines();
+  updateTodayFocusRail();
+  renderAlarms();
+  return true;
 }
 
 function ensureHoverGuideElement() {
@@ -6152,10 +6167,17 @@ function refreshDayStackZoomLayout() {
   ) {
     return false;
   }
+  dayStackLayer.classList.add("zoom-layout-refresh");
   applyDayStackBodyOpenRatios(undefined, false);
   updateDayStackMonthRailLabelPositions();
   updateDayStackNowLines(new Date());
   renderDayStackAlarms();
+  void dayStackLayer.offsetHeight;
+  requestAnimationFrame(() => {
+    if (dayStackLayer) {
+      dayStackLayer.classList.remove("zoom-layout-refresh");
+    }
+  });
   return true;
 }
 
