@@ -435,6 +435,79 @@ def main() -> int:
             """,
             timeout=20.0,
         )
+        today_focus_render_budget_state = session.evaluate(
+            """
+            (async () => {
+              setDayStackOpen(false);
+              setTodayFocusMode(true);
+              const anchorY = timelineWrap.getBoundingClientRect().top + timelineWrap.clientHeight / 2;
+              setMinutePx(BASE_MINUTE_PX, null, anchorY);
+              buildTimeline();
+              await new Promise((resolve) => setTimeout(resolve, 80));
+
+              const originalBuildTimeline = buildTimeline;
+              const originalRenderDayStack = renderDayStack;
+              const originalBuildHourLines = buildHourLines;
+              const originalRenderAlarms = renderAlarms;
+              let buildTimelineCount = 0;
+              let renderDayStackCount = 0;
+              let buildHourLinesCount = 0;
+              let renderAlarmsCount = 0;
+              buildTimeline = function (...args) {
+                buildTimelineCount += 1;
+                return originalBuildTimeline.apply(this, args);
+              };
+              renderDayStack = function (...args) {
+                renderDayStackCount += 1;
+                return originalRenderDayStack.apply(this, args);
+              };
+              buildHourLines = function (...args) {
+                buildHourLinesCount += 1;
+                return originalBuildHourLines.apply(this, args);
+              };
+              renderAlarms = function (...args) {
+                renderAlarmsCount += 1;
+                return originalRenderAlarms.apply(this, args);
+              };
+              const startedAt = performance.now();
+              try {
+                animateMinutePx(ZOOM_MINUTE_PX, new Date(), anchorY);
+                for (let attempt = 0; attempt < 40; attempt += 1) {
+                  if (Math.abs(minutePx - ZOOM_MINUTE_PX) < 0.01) break;
+                  await new Promise((resolve) => setTimeout(resolve, 25));
+                }
+              } finally {
+                buildTimeline = originalBuildTimeline;
+                renderDayStack = originalRenderDayStack;
+                buildHourLines = originalBuildHourLines;
+                renderAlarms = originalRenderAlarms;
+              }
+              const elapsedMs = performance.now() - startedAt;
+              return {
+                buildTimelineCount,
+                renderDayStackCount,
+                buildHourLinesCount,
+                renderAlarmsCount,
+                elapsedMs,
+                fastTodayFocusRefresh:
+                  buildTimelineCount === 0 &&
+                  renderDayStackCount === 0 &&
+                  buildHourLinesCount <= ZOOM_ANIMATION_RENDER_STEPS &&
+                  renderAlarmsCount <= ZOOM_ANIMATION_RENDER_STEPS,
+                minutePx,
+                ok:
+                  todayFocusMode &&
+                  !dayStackOpen &&
+                  Math.abs(minutePx - ZOOM_MINUTE_PX) < 0.01 &&
+                  buildTimelineCount === 0 &&
+                  renderDayStackCount === 0 &&
+                  buildHourLinesCount <= ZOOM_ANIMATION_RENDER_STEPS &&
+                  renderAlarmsCount <= ZOOM_ANIMATION_RENDER_STEPS,
+              };
+            })()
+            """,
+            timeout=20.0,
+        )
         session.screenshot(zoom_shot)
         results["proof_files"].append(zoom_shot.name)
         if (
@@ -446,6 +519,8 @@ def main() -> int:
             or not context_double_right_click_state.get("ok")
             or not zoom_render_budget_state
             or not zoom_render_budget_state.get("ok")
+            or not today_focus_render_budget_state
+            or not today_focus_render_budget_state.get("ok")
         ):
             results["issues"].append("zoom_backflow_failed")
 
@@ -740,6 +815,7 @@ def main() -> int:
                 "base_ok": zoom_base_ok,
                 "double_right_click": context_double_right_click_state,
                 "render_budget": zoom_render_budget_state,
+                "today_focus_render_budget": today_focus_render_budget_state,
             },
             "dblclick_readable": dblclick_readable_state,
         }
