@@ -422,9 +422,11 @@ def main() -> int:
                 renderDayStackCount,
                 elapsedMs,
                 renderStepBudget: ZOOM_ANIMATION_RENDER_STEPS,
+                singleRenderBudget: ZOOM_ANIMATION_RENDER_STEPS === 1,
                 minutePx,
                 ok:
                   Math.abs(minutePx - MAX_ZOOM_MINUTE_PX) < 0.01 &&
+                  ZOOM_ANIMATION_RENDER_STEPS === 1 &&
                   buildTimelineCount <= ZOOM_ANIMATION_RENDER_STEPS &&
                   renderDayStackCount <= ZOOM_ANIMATION_RENDER_STEPS,
               };
