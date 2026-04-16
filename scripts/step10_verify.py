@@ -30,6 +30,7 @@ def main() -> int:
         keyboard_shot = proof_path("verify-step10-keyboard-month-rail.png")
         zoom_shot = proof_path("verify-step10-zoom-backflow.png")
         dblclick_readable_shot = proof_path("verify-step10-dblclick-readable-zoom.png")
+        time_axis_shot = proof_path("verify-step10-time-axis.png")
 
         refresh_state_before = session.evaluate(
             """
@@ -79,6 +80,90 @@ def main() -> int:
         results["proof_files"].append(refresh_shot.name)
         if not refresh_ok:
             results["issues"].append("refresh_view_restore_failed")
+
+        time_axis_state = session.evaluate(
+            """
+            (async () => {
+              const approxEqual = (a, b, tolerance = 0.01) =>
+                Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= tolerance;
+              const readTimelineRows = () => {
+                const labels = Array.from(document.querySelectorAll("#timeline > .hour-label"));
+                const lines = Array.from(document.querySelectorAll("#timeline > .hour-line"));
+                return ["00:00", "01:00", "24:00"].map((text) => {
+                  const label = labels.find((node) => (node.textContent || "").trim() === text);
+                  const labelTop = label ? Number.parseFloat(label.style.top || "") : NaN;
+                  const line = lines.find((node) => {
+                    const lineTop = Number.parseFloat(node.style.top || "");
+                    return approxEqual(lineTop, labelTop);
+                  });
+                  return {
+                    text,
+                    labelTop,
+                    lineTop: line ? Number.parseFloat(line.style.top || "") : NaN,
+                    aligned: Boolean(line),
+                  };
+                });
+              };
+              const rowsOk = (rows) =>
+                rows.length === 3 &&
+                rows.every((row) => row.aligned !== false && Number.isFinite(row.labelTop)) &&
+                approxEqual(rows[0].labelTop, dayTimeAxisPadding()) &&
+                approxEqual(rows[2].labelTop - rows[0].labelTop, DAY_MINUTES * minutePx);
+
+              setDayStackOpen(false);
+              setTodayFocusMode(true, { rebuildTimeline: false });
+              setTodayFocusHourMode(false);
+              buildTimeline();
+              const timelineRows = readTimelineRows();
+              const timelineBottomSpace = dayBlockHeight - timelineRows[2].labelTop;
+              const timelineOk = rowsOk(timelineRows) && approxEqual(timelineBottomSpace, dayTimeAxisPadding());
+
+              focusDateInDayStack(startOfDay(new Date()), { expand: true });
+              await new Promise((resolve) => setTimeout(resolve, 700));
+              const body = document.querySelector(".dayStackItem.expanded .dayStackBody");
+              const bodyHeight = body ? Number.parseFloat(getComputedStyle(body).height || "") : NaN;
+              const stackRows = Array.from(
+                document.querySelectorAll(".dayStackItem.expanded .dayStackHourLabel")
+              )
+                .map((label) => {
+                  const text = (label.textContent || "").trim();
+                  if (!["00:00", "01:00", "24:00"].includes(text)) return null;
+                  return { text, labelTop: Number.parseFloat(label.style.top || "") };
+                })
+                .filter(Boolean);
+              const stackBottomSpace =
+                stackRows.length >= 3 && Number.isFinite(bodyHeight)
+                  ? bodyHeight - stackRows[2].labelTop
+                  : NaN;
+              const stackOk =
+                stackRows.length === 3 &&
+                approxEqual(stackRows[0].labelTop, dayTimeAxisPadding()) &&
+                approxEqual(stackRows[2].labelTop - stackRows[0].labelTop, DAY_MINUTES * minutePx) &&
+                approxEqual(stackBottomSpace, dayTimeAxisPadding());
+              return {
+                timeline: {
+                  rows: timelineRows,
+                  bottomSpace: timelineBottomSpace,
+                  ok: timelineOk,
+                },
+                dayStack: {
+                  rows: stackRows,
+                  bodyHeight,
+                  bottomSpace: stackBottomSpace,
+                  ok: stackOk,
+                },
+                minutePx,
+                dayTimeAxisPadding: dayTimeAxisPadding(),
+                ok: timelineOk && stackOk,
+              };
+            })()
+            """,
+            timeout=20.0,
+        )
+        session.screenshot(time_axis_shot)
+        results["proof_files"].append(time_axis_shot.name)
+        if not time_axis_state or not time_axis_state.get("ok"):
+            results["issues"].append("time_axis_alignment_failed")
 
         inline_state = session.evaluate(
             """
@@ -900,6 +985,7 @@ def main() -> int:
                 "step_ok": step_ok,
                 "cancelled": inline_cancel_ok,
             },
+            "time_axis": time_axis_state,
             "keyboard": {
                 "state": keyboard_state,
                 "target_month": keyboard_target_month,
