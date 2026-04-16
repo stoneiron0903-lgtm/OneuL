@@ -3,6 +3,7 @@ const ZOOM_MINUTE_PX = 1.0;
 const MAX_ZOOM_MINUTE_PX = 2.0;
 const MINUTE_PX_EPSILON = 0.0001;
 const DAY_BAR_HEIGHT = 24;
+const DAY_TIME_AXIS_PADDING_PX = DAY_BAR_HEIGHT;
 const DAYS_BEFORE = 3;
 const DAYS_AFTER = 3;
 const TOTAL_DAYS = DAYS_BEFORE + DAYS_AFTER + 1;
@@ -81,7 +82,7 @@ const WEATHER_FALLBACK_COORDS = {
 };
 
 let minutePx = BASE_MINUTE_PX;
-let dayBlockHeight = DAY_BAR_HEIGHT + DAY_MINUTES * minutePx;
+let dayBlockHeight = DAY_BAR_HEIGHT + DAY_TIME_AXIS_PADDING_PX * 2 + DAY_MINUTES * minutePx;
 let hourHeight = 60 * minutePx;
 
 const timelineWrap = document.getElementById("timelineWrap");
@@ -517,6 +518,26 @@ function timelineDayHeaderHeight() {
   return todayFocusMode ? 0 : DAY_BAR_HEIGHT;
 }
 
+function dayTimeAxisPadding() {
+  return DAY_TIME_AXIS_PADDING_PX;
+}
+
+function dayTimeBaseHeight() {
+  return DAY_MINUTES * minutePx;
+}
+
+function dayTimeBodyHeight() {
+  return dayTimeAxisPadding() * 2 + dayTimeBaseHeight();
+}
+
+function timelineDayTimeStartOffset() {
+  return timelineDayHeaderHeight() + dayTimeAxisPadding();
+}
+
+function timelineDayTimeEndOffset() {
+  return timelineDayTimeStartOffset() + dayTimeBaseHeight();
+}
+
 function defaultTimelineStartDate(baseDate = new Date()) {
   return addDays(startOfDay(baseDate), -DAYS_BEFORE);
 }
@@ -606,6 +627,7 @@ function todayFocusFittedMinutePx() {
     timelineWrap.clientHeight -
       timelineDayHeaderHeight() -
       todayFocusHeaderHeight() -
+      dayTimeAxisPadding() * 2 -
       todayFocusHourVerticalPadding() * 2
   );
   if (!Number.isFinite(viewportHeight) || viewportHeight <= 0) return 0;
@@ -624,11 +646,12 @@ function recalcSizes() {
   if (todayFocusMode) {
     applyTodayFocusFittedScale();
   }
-  dayBlockHeight = timelineDayHeaderHeight() + DAY_MINUTES * minutePx;
+  dayBlockHeight = timelineDayHeaderHeight() + dayTimeBodyHeight();
   hourHeight = 60 * minutePx;
   if (dayStackLayer) {
-    dayStackLayer.style.setProperty("--stack-day-body-height", `${DAY_MINUTES * minutePx}px`);
+    dayStackLayer.style.setProperty("--stack-day-body-height", `${dayTimeBodyHeight()}px`);
     dayStackLayer.style.setProperty("--stack-hour-height", `${hourHeight}px`);
+    dayStackLayer.style.setProperty("--stack-time-axis-pad", `${dayTimeAxisPadding()}px`);
   }
 }
 
@@ -672,7 +695,7 @@ function timelineRenderYForDateTime(dateTime) {
   if (todayFocusMode) {
     return todayFocusRenderedYForBaseY(minutes * minutePx);
   }
-  return dayIndex * dayBlockHeight + timelineDayHeaderHeight() + minutes * minutePx;
+  return dayIndex * dayBlockHeight + timelineDayTimeStartOffset() + minutes * minutePx;
 }
 
 function timelineRenderedYForTotalMinutes(totalMinutes) {
@@ -683,7 +706,7 @@ function timelineRenderedYForTotalMinutes(totalMinutes) {
   if (todayFocusMode) {
     return todayFocusRenderedYForBaseY(baseY);
   }
-  return dayIndex * dayBlockHeight + timelineDayHeaderHeight() + baseY;
+  return dayIndex * dayBlockHeight + timelineDayTimeStartOffset() + baseY;
 }
 
 function timelineDateTimeFromClientY(clientY, fallbackDateTime = null) {
@@ -2324,10 +2347,10 @@ function renderTimelineSleepWindows() {
       const endMinutes = (segment.overlapEnd.getTime() - dayStart.getTime()) / 60000;
       const top = todayFocusMode
         ? todayFocusRenderedYForBaseY(startMinutes * minutePx)
-        : dayIndex * dayBlockHeight + timelineDayHeaderHeight() + startMinutes * minutePx;
+        : dayIndex * dayBlockHeight + timelineDayTimeStartOffset() + startMinutes * minutePx;
       const bottom = todayFocusMode
         ? todayFocusRenderedYForBaseY(endMinutes * minutePx)
-        : dayIndex * dayBlockHeight + timelineDayHeaderHeight() + endMinutes * minutePx;
+        : dayIndex * dayBlockHeight + timelineDayTimeStartOffset() + endMinutes * minutePx;
       const height = Math.max(0, bottom - top);
       if (height <= 1) return;
       const windowEl = document.createElement("div");
@@ -2586,7 +2609,7 @@ function updateSelectionMarker() {
     selectedDateTime.getSeconds() / 60;
   const y = todayFocusMode
     ? todayFocusRenderedYForBaseY(minutes * minutePx)
-    : dayIndex * dayBlockHeight + timelineDayHeaderHeight() + minutes * minutePx;
+    : dayIndex * dayBlockHeight + timelineDayTimeStartOffset() + minutes * minutePx;
   const barTop = Math.max(0, y - hourHeight / 2);
 
   selectionMarker.style.display = "inline-flex";
@@ -2682,7 +2705,7 @@ function timelineAlarmNearY(timelineY = NaN) {
 function visibleTimelineScheduleEntries() {
   const visibleEntries = [];
   const visibleDayCount = timelineVisibleDayCount();
-  const dayHeaderHeight = timelineDayHeaderHeight();
+  const dayTimeStartOffset = timelineDayTimeStartOffset();
   alarms.forEach((alarm, alarmIndex) => {
     const alarmTime = alarm instanceof Date ? alarm : alarm.time;
     if (!(alarmTime instanceof Date) || !Number.isFinite(alarmTime.getTime())) return;
@@ -2698,7 +2721,7 @@ function visibleTimelineScheduleEntries() {
       alarmTime,
       title,
       dayIndex,
-      y: dayIndex * dayBlockHeight + dayHeaderHeight + minutes * minutePx,
+      y: dayIndex * dayBlockHeight + dayTimeStartOffset + minutes * minutePx,
       alarmIndex,
       allDay: false,
       htmlLink: "",
@@ -2718,7 +2741,7 @@ function visibleTimelineScheduleEntries() {
       alarmTime,
       title: googleEventDisplayTitle(event),
       dayIndex,
-      y: dayIndex * dayBlockHeight + dayHeaderHeight + minutes * minutePx,
+      y: dayIndex * dayBlockHeight + dayTimeStartOffset + minutes * minutePx,
       alarmIndex: Number.MAX_SAFE_INTEGER,
       allDay: Boolean(event.allDay),
       htmlLink: typeof event.htmlLink === "string" ? event.htmlLink : "",
@@ -2899,15 +2922,16 @@ function renderAlarms() {
     const isMaxZoom = minutePx >= MAX_ZOOM_MINUTE_PX - 0.02;
     const showCompactText = minutePx >= ZOOM_MINUTE_PX - MINUTE_PX_EPSILON;
     const visibleAlarms = visibleTimelineScheduleEntries();
-    const dayHeaderHeight = timelineDayHeaderHeight();
+    const dayTimeStartOffset = timelineDayTimeStartOffset();
+    const dayTimeEndOffset = timelineDayTimeEndOffset();
     const lastBottomByDay = new Map();
     visibleAlarms.forEach((entry) => {
       const { alarmTime, title, dayIndex } = entry;
       let renderY = entry.y;
       if (isMaxZoom) {
         const halfHeight = ALARM_EXPANDED_HEIGHT_PX / 2;
-        const dayStartY = dayIndex * dayBlockHeight + dayHeaderHeight;
-        const dayEndY = (dayIndex + 1) * dayBlockHeight;
+        const dayStartY = dayIndex * dayBlockHeight + dayTimeStartOffset;
+        const dayEndY = dayIndex * dayBlockHeight + dayTimeEndOffset;
         let top = renderY - halfHeight;
         const prevBottom = lastBottomByDay.get(dayIndex);
         if (Number.isFinite(prevBottom) && top < prevBottom + ALARM_EXPANDED_GAP_PX) {
@@ -3575,7 +3599,7 @@ function updateHoverGuideFromClientY(clientY, clientX = hoverPointerClientX) {
   }
   const dayIndex = Math.floor(timelineY / dayBlockHeight);
   const withinDay = timelineY - dayIndex * dayBlockHeight;
-  if (withinDay < timelineDayHeaderHeight()) {
+  if (withinDay < timelineDayTimeStartOffset() || withinDay > timelineDayTimeEndOffset()) {
     hideHoverGuide();
     return;
   }
@@ -3621,35 +3645,36 @@ function buildHourLines() {
     }
     return;
   }
-  const totalHours = timelineVisibleDayCount() * 24;
-  const dayHeaderHeight = timelineDayHeaderHeight();
-  for (let h = 0; h < totalHours; h += 1) {
-    const dayIndex = Math.floor(h / 24);
-    const hourInDay = h % 24;
-    const baseY = dayIndex * DAY_MINUTES * minutePx + hourInDay * 60 * minutePx;
-    const y = todayFocusMode
-      ? todayFocusRenderedYForBaseY(baseY)
-      : dayIndex * dayBlockHeight + dayHeaderHeight + hourInDay * 60 * minutePx;
+  const visibleDayCount = timelineVisibleDayCount();
+  const dayTimeStartOffset = timelineDayTimeStartOffset();
+  for (let dayIndex = 0; dayIndex < visibleDayCount; dayIndex += 1) {
+    for (let hourInDay = 0; hourInDay <= 24; hourInDay += 1) {
+      const minutes = hourInDay * 60;
+      const baseY = minutes * minutePx;
+      const y = todayFocusMode
+        ? todayFocusRenderedYForBaseY(baseY)
+        : dayIndex * dayBlockHeight + dayTimeStartOffset + baseY;
 
-    const label = document.createElement("div");
-    label.className = "hour-label";
-    label.style.top = `${y}px`;
-    label.textContent = `${pad2(hourInDay)}:00`;
-    timeline.appendChild(label);
+      const label = document.createElement("div");
+      label.className = "hour-label";
+      label.style.top = `${y}px`;
+      label.textContent = hourInDay === 24 ? "24:00" : `${pad2(hourInDay)}:00`;
+      timeline.appendChild(label);
 
-    const line = document.createElement("div");
-    line.className = "hour-line";
-    line.style.top = `${y}px`;
-    timeline.appendChild(line);
+      const line = document.createElement("div");
+      line.className = "hour-line";
+      line.style.top = `${y}px`;
+      timeline.appendChild(line);
 
-    const half = document.createElement("div");
-    half.className = "half-line";
-    const halfBaseY = dayIndex * DAY_MINUTES * minutePx + hourInDay * 60 * minutePx + 30 * minutePx;
-    const halfY = todayFocusMode
-      ? todayFocusRenderedYForBaseY(halfBaseY)
-      : y + 30 * minutePx;
-    half.style.top = `${halfY}px`;
-    timeline.appendChild(half);
+      if (hourInDay < 24) {
+        const half = document.createElement("div");
+        half.className = "half-line";
+        const halfBaseY = baseY + 30 * minutePx;
+        const halfY = todayFocusMode ? todayFocusRenderedYForBaseY(halfBaseY) : y + 30 * minutePx;
+        half.style.top = `${halfY}px`;
+        timeline.appendChild(half);
+      }
+    }
   }
 }
 
@@ -4225,7 +4250,7 @@ function updateNowLine(now) {
   const minutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
   const y = todayFocusMode
     ? todayFocusRenderedYForBaseY(minutes * minutePx)
-    : dayIndex * dayBlockHeight + timelineDayHeaderHeight() + minutes * minutePx;
+    : dayIndex * dayBlockHeight + timelineDayTimeStartOffset() + minutes * minutePx;
   const timeText = now.toTimeString().slice(0, 8);
   nowLine.style.top = `${y}px`;
   setNowLineLabel(timeText);
@@ -4468,7 +4493,7 @@ function dayStackInlineEditorLayoutForKey(itemDateKey = "") {
     sourceDateTime.getHours() * 60 +
     sourceDateTime.getMinutes() +
     sourceDateTime.getSeconds() / 60;
-  const splitY = Math.max(0, Math.min(DAY_MINUTES * minutePx, totalMinutes * minutePx));
+  const splitY = Math.max(0, Math.min(dayTimeBaseHeight(), totalMinutes * minutePx));
   return {
     sourceType,
     totalMinutes,
@@ -4544,7 +4569,7 @@ function dayStackVisibleAlarmEntriesForKey(itemDateKey = "") {
       eventId: "",
       htmlLink: "",
       allDay: false,
-      baseY: Math.max(0, Math.min(DAY_MINUTES * minutePx, totalMinutes * minutePx)),
+      baseY: Math.max(0, Math.min(dayTimeBaseHeight(), totalMinutes * minutePx)),
     });
   });
   googleEvents.forEach((event) => {
@@ -4572,7 +4597,7 @@ function dayStackVisibleAlarmEntriesForKey(itemDateKey = "") {
       eventId,
       htmlLink: typeof event.htmlLink === "string" ? event.htmlLink : "",
       allDay: Boolean(event.allDay),
-      baseY: Math.max(0, Math.min(DAY_MINUTES * minutePx, totalMinutes * minutePx)),
+      baseY: Math.max(0, Math.min(dayTimeBaseHeight(), totalMinutes * minutePx)),
     });
   });
   entries.sort((a, b) => compareScheduleEntries(a, b, "baseY"));
@@ -4753,16 +4778,16 @@ function dayStackAlarmExtraHeightForKey(itemDateKey = "") {
 
 function dayStackRenderedMaxYForItem(itemDateKey = "") {
   return (
-    DAY_MINUTES * minutePx +
+    dayTimeBodyHeight() +
     dayStackAlarmExtraHeightForKey(itemDateKey) +
     (dayStackInlineEditorLayoutForKey(itemDateKey)?.slotHeight || 0)
   );
 }
 
 function dayStackRenderedYForItem(baseY, itemDateKey = "") {
-  const y = Math.max(0, Math.min(DAY_MINUTES * minutePx, baseY));
+  const y = Math.max(0, Math.min(dayTimeBaseHeight(), baseY));
   const alarmSlots = dayStackAlarmSlotsForKey(itemDateKey);
-  let rendered = y;
+  let rendered = dayTimeAxisPadding() + y;
   for (let i = 0; i < alarmSlots.length; i += 1) {
     if (y > alarmSlots[i].splitY + 0.0001) {
       rendered += alarmSlots[i].slotHeight;
@@ -4777,7 +4802,7 @@ function dayStackBaseYForItem(renderedY, itemDateKey = "") {
   const maxRendered = dayStackRenderedMaxYForItem(itemDateKey);
   const targetY = Math.max(0, Math.min(maxRendered, renderedY));
   let low = 0;
-  let high = DAY_MINUTES * minutePx;
+  let high = dayTimeBaseHeight();
   for (let i = 0; i < 24; i += 1) {
     const mid = (low + high) * 0.5;
     const mapped = dayStackRenderedYForItem(mid, itemDateKey);
@@ -4787,7 +4812,7 @@ function dayStackBaseYForItem(renderedY, itemDateKey = "") {
       high = mid;
     }
   }
-  return Math.max(0, Math.min(DAY_MINUTES * minutePx, high));
+  return Math.max(0, Math.min(dayTimeBaseHeight(), high));
 }
 
 function buildDayStackInlineEditorCard(layout) {
@@ -4926,7 +4951,7 @@ function refreshDayStackInlineEditorLayout(item, body, itemDateKey = "") {
       node.remove();
     });
   if (hasGridLayers) {
-    const dayEndY = DAY_MINUTES * minutePx;
+    const dayEndY = dayTimeBaseHeight();
     const slots = alarmSlots.map((slot) => ({
       splitY: slot.splitY,
       slotHeight: slot.slotHeight,
@@ -4955,7 +4980,7 @@ function refreshDayStackInlineEditorLayout(item, body, itemDateKey = "") {
     };
 
     let baseCursor = 0;
-    let renderedCursor = 0;
+    let renderedCursor = dayTimeAxisPadding();
     slots.forEach((slot) => {
       const splitY = Math.max(0, Math.min(dayEndY, slot.splitY));
       const segmentHeight = Math.max(0, splitY - baseCursor);
@@ -4970,11 +4995,11 @@ function refreshDayStackInlineEditorLayout(item, body, itemDateKey = "") {
 
   const labels = document.createElement("div");
   labels.className = "dayStackHourLabels";
-  for (let hour = 0; hour < 24; hour += 1) {
+  for (let hour = 0; hour <= 24; hour += 1) {
     const label = document.createElement("div");
     label.className = "dayStackHourLabel";
     label.style.top = `${dayStackRenderedYForItem(hour * hourHeight, itemDateKey)}px`;
-    label.textContent = `${pad2(hour)}:00`;
+    label.textContent = hour === 24 ? "24:00" : `${pad2(hour)}:00`;
     labels.appendChild(label);
   }
   body.appendChild(labels);
@@ -5445,7 +5470,7 @@ function updateDayStackNowLines(now = new Date()) {
 
   const todayKey = dateKeyFromDate(now);
   const minutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
-  const y = Math.max(0, Math.min(DAY_MINUTES * minutePx, minutes * minutePx));
+  const y = Math.max(0, Math.min(dayTimeBaseHeight(), minutes * minutePx));
   const timeText = now.toTimeString().slice(0, 8);
   const isToday = item.dataset.date === todayKey;
   line.style.display = isToday ? "block" : "none";
@@ -6364,6 +6389,8 @@ function installDayStackLayerInteractions() {
   let selectOverlayAnimated = false;
   let hoverOverlay = null;
   let longPressConsumed = false;
+  let sleepPressActive = false;
+  let pressStartedAt = 0;
   let wobbleTimer = null;
   let opacityDelayTimer = null;
   let opacityInterval = null;
@@ -6381,6 +6408,15 @@ function installDayStackLayerInteractions() {
     if (!pressTimer) return;
     clearTimeout(pressTimer);
     pressTimer = null;
+  };
+
+  const consumeSleepWindowLongPress = () => {
+    if (!pressed || dragging || longPressConsumed || !sleepPressActive) return false;
+    openSleepWindowPreferenceEditor();
+    suppressClick = true;
+    longPressConsumed = true;
+    sleepPressActive = false;
+    return true;
   };
 
   const clearMonthRailClickTimer = () => {
@@ -6955,6 +6991,7 @@ function installDayStackLayerInteractions() {
     pressed = false;
     dragging = false;
     spreadDragging = false;
+    sleepPressActive = false;
     dayStackLayer.classList.remove("dragging");
     if (typeof pointerId === "number") {
       try {
@@ -7001,6 +7038,8 @@ function installDayStackLayerInteractions() {
     pressed = true;
     dragging = false;
     suppressClick = false;
+    sleepPressActive = false;
+    pressStartedAt = performance.now();
     pressX = e.clientX;
     pressY = e.clientY;
     dragStartY = e.clientY;
@@ -7012,12 +7051,10 @@ function installDayStackLayerInteractions() {
     velocity = 0;
     clearSelectionState();
     if (sleepWindow) {
+      sleepPressActive = true;
       pressTimer = setTimeout(() => {
         pressTimer = null;
-        if (!pressed || dragging || longPressConsumed) return;
-        openSleepWindowPreferenceEditor();
-        suppressClick = true;
-        longPressConsumed = true;
+        consumeSleepWindowLongPress();
       }, DAY_STACK_INLINE_EDITOR_LONG_PRESS_MS);
       dayStackLayer.setPointerCapture(e.pointerId);
       e.stopPropagation();
@@ -7106,6 +7143,7 @@ function installDayStackLayerInteractions() {
       const dyPress = e.clientY - pressY;
       if (Math.hypot(dx, dyPress) > 6) {
         clearPressTimer();
+        sleepPressActive = false;
         dragging = true;
         suppressClick = true;
         spreadDragging = false;
@@ -7178,6 +7216,20 @@ function installDayStackLayerInteractions() {
       endDrag(e.pointerId);
       suppressClick = false;
       finishSelecting();
+      return;
+    }
+    if (sleepPressActive && !longPressConsumed && !dragging) {
+      const elapsed = performance.now() - pressStartedAt;
+      const drift = Math.hypot(e.clientX - pressX, e.clientY - pressY);
+      if (elapsed >= DAY_STACK_INLINE_EDITOR_LONG_PRESS_MS && drift <= DRAG_START_THRESHOLD_PX) {
+        consumeSleepWindowLongPress();
+      }
+    }
+    if (longPressConsumed) {
+      clearPressTimer();
+      endDrag(e.pointerId);
+      suppressClick = false;
+      longPressConsumed = false;
       return;
     }
     clearPressTimer();
@@ -7766,9 +7818,11 @@ function minutesForY(y) {
   const block = dayBlockHeight;
   const dayIndex = Math.floor(y / block);
   const within = y - dayIndex * block;
-  const dayHeaderHeight = timelineDayHeaderHeight();
-  if (within <= dayHeaderHeight) return dayIndex * DAY_MINUTES;
-  return dayIndex * DAY_MINUTES + (within - dayHeaderHeight) / minutePx;
+  const dayTimeStartOffset = timelineDayTimeStartOffset();
+  const dayTimeEndOffset = timelineDayTimeEndOffset();
+  if (within <= dayTimeStartOffset) return dayIndex * DAY_MINUTES;
+  if (within >= dayTimeEndOffset) return (dayIndex + 1) * DAY_MINUTES;
+  return dayIndex * DAY_MINUTES + (within - dayTimeStartOffset) / minutePx;
 }
 
 function dateTimeFromClientPoint(clientX, clientY) {
@@ -7837,9 +7891,10 @@ function dayStackDateTimeFromClientPoint(clientX, clientY) {
   }
 
   const rect = body.getBoundingClientRect();
-  const maxY = DAY_MINUTES * minutePx;
-  const y = Math.max(0, Math.min(maxY, clientY - rect.top));
-  const totalMinutes = y / minutePx;
+  const itemDateKey = item.dataset && typeof item.dataset.date === "string" ? item.dataset.date : "";
+  const renderedMaxY = dayStackRenderedMaxYForItem(itemDateKey);
+  const renderedY = Math.max(0, Math.min(renderedMaxY, clientY - rect.top));
+  const totalMinutes = dayStackBaseYForItem(renderedY, itemDateKey) / minutePx;
   let hour = Math.floor(totalMinutes / 60);
   let minute = Math.floor(totalMinutes - hour * 60);
   let second = Math.round((totalMinutes - hour * 60 - minute) * 60);
@@ -7970,7 +8025,7 @@ function scrollToNow() {
   const minutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
   const y =
     dayIndex * dayBlockHeight +
-    timelineDayHeaderHeight() +
+    timelineDayTimeStartOffset() +
     minutes * minutePx;
   timelineWrap.scrollTop = Math.max(0, y - timelineNowOffset());
   updateStickyDay();
@@ -8224,11 +8279,26 @@ function installDragScroll() {
   let pointerX = 0;
   let pointerY = 0;
   let todayFocusHourDragDelta = 0;
+  let sleepPressActive = false;
+  let pressStartedAt = 0;
 
   function clearTimer() {
     if (!pressTimer) return;
     clearTimeout(pressTimer);
     pressTimer = null;
+  }
+
+  function consumeSleepWindowLongPress() {
+    if (!pressed || dragging || longPressConsumed || !sleepPressActive) return false;
+    const drift = Math.hypot(pointerX - pressX, pointerY - pressY);
+    if (drift > DRAG_START_THRESHOLD_PX) return false;
+    openSleepWindowPreferenceEditor();
+    hideSelectionElements();
+    longPressConsumed = true;
+    dragging = false;
+    selecting = false;
+    sleepPressActive = false;
+    return true;
   }
 
   function dateTimeFromPointer(clientX, clientY) {
@@ -8489,6 +8559,8 @@ function installDragScroll() {
     todayFocusHourDragDelta = 0;
     todayFocusSuppressNextInlineClick = false;
     longPressConsumed = false;
+    sleepPressActive = false;
+    pressStartedAt = performance.now();
     clearTimer();
     const sleepWindow = sleepWindowElementFromPointer(
       e.target,
@@ -8497,15 +8569,10 @@ function installDragScroll() {
       ".sleep-window"
     );
     if (sleepWindow) {
+      sleepPressActive = true;
       pressTimer = setTimeout(() => {
-        if (!pressed) return;
-        const drift = Math.hypot(pointerX - pressX, pointerY - pressY);
-        if (drift > DRAG_START_THRESHOLD_PX) return;
-        openSleepWindowPreferenceEditor();
-        hideSelectionElements();
-        longPressConsumed = true;
-        dragging = false;
-        selecting = false;
+        pressTimer = null;
+        consumeSleepWindowLongPress();
       }, DAY_STACK_INLINE_EDITOR_LONG_PRESS_MS);
       timelineWrap.setPointerCapture(e.pointerId);
       return;
@@ -8569,6 +8636,7 @@ function installDragScroll() {
       const dyPress = e.clientY - pressY;
       if (Math.hypot(dx, dyPress) > DRAG_START_THRESHOLD_PX) {
         clearTimer();
+        sleepPressActive = false;
         dragging = true;
       }
     }
@@ -8608,8 +8676,15 @@ function installDragScroll() {
 
   timelineWrap.addEventListener("pointerup", (e) => {
     if (!pressed) return;
+    if (sleepPressActive && !longPressConsumed && !dragging) {
+      const elapsed = performance.now() - pressStartedAt;
+      if (elapsed >= DAY_STACK_INLINE_EDITOR_LONG_PRESS_MS) {
+        consumeSleepWindowLongPress();
+      }
+    }
     pressed = false;
     pointerActive = false;
+    sleepPressActive = false;
     clearTimer();
     timelineWrap.releasePointerCapture(e.pointerId);
     if (longPressConsumed) {

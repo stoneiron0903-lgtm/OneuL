@@ -1300,8 +1300,9 @@ body {
   overflow-anchor: none;
   background: linear-gradient(180deg, rgba(25, 29, 36, 0.98) 0%, rgba(20, 23, 29, 0.94) 100%);
   user-select: none;
-  --stack-day-body-height: 720px;
+  --stack-day-body-height: 768px;
   --stack-hour-height: 30px;
+  --stack-time-axis-pad: 24px;
   --stack-band-a-header-bg: #1c2432;
   --stack-band-a-header-color: #d4dded;
   --stack-band-b-header-bg: #21242c;
@@ -2152,8 +2153,8 @@ body {
   position: absolute;
   left: var(--left-pad);
   right: 12px;
-  top: 0;
-  bottom: 0;
+  top: var(--stack-time-axis-pad);
+  bottom: var(--stack-time-axis-pad);
   background:
     repeating-linear-gradient(
       to bottom,
